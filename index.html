@@ -4074,7 +4074,7 @@ function ResumenFinanciero({facturas,gastos,cuentasPagar,pagos,resinaLogs,movs})
         return <div key={cat.v} style={{marginBottom:8}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
             <span style={{color:B.textMid,fontSize:12,fontWeight:600}}>{cat.l}</span>
-            <span style={{color:B.textDark,fontSize:12,fontWeight:700}}>{amtUSD>0?"US$ "+amtUSD.toLocaleString():""}{amtUSD>0&&amtRD>0?" · ":""}{amtRD>0?"HTG "+amtRD.toLocaleString():""}{!amtUSD&&!amtRD?"—":""}</span>
+            <span style={{color:B.textDark,fontSize:12,fontWeight:700}}>{amtUSD>0?"US$ "+amtUSD.toLocaleString():"—"}</span>
           </div>
           <div style={{height:8,background:B.bg,borderRadius:4}}>
             <div style={{height:"100%",background:B.teal,borderRadius:4,width:pct+"%",transition:"width .3s"}}/>
