@@ -1232,7 +1232,7 @@ function Registro({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,movs,set
         </div>}
 
         {form.etapa==="impresion"&&<div>
-          <F label="Producto" value={form.producto} onChange={set("producto")} placeholder="Ej: Tubo PVC 2\" SDR-26 x 6m"/>
+          <F label="Producto" value={form.producto} onChange={set("producto")} placeholder="Ej: Tubo PVC 2″ SDR-26 x 6m"/>
           <div style={{marginTop:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <F label="Entrada (lbs)" value={form.lbsImpresion} onChange={set("lbsImpresion")} type="number" placeholder="0"/>
             <F label="Rollos Impresos" value={form.rollosProducidos} onChange={set("rollosProducidos")} type="number" placeholder="0"/>
@@ -1241,7 +1241,7 @@ function Registro({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,movs,set
         </div>}
 
         {form.etapa==="slitter"&&<div>
-          <F label="Producto" value={form.producto} onChange={set("producto")} placeholder="Ej: Tubo PVC 2\" SDR-26 x 6m"/>
+          <F label="Producto" value={form.producto} onChange={set("producto")} placeholder="Ej: Tubo PVC 2″ SDR-26 x 6m"/>
           <div style={{marginTop:12}}><F label="Cliente (opcional)" value={form.cliente} onChange={set("cliente")} placeholder="Nombre"/></div>
           <div style={{marginTop:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <F label="Entrada (lbs)" value={form.lbsSlitter} onChange={set("lbsSlitter")} type="number" placeholder="0"/>
@@ -1255,7 +1255,7 @@ function Registro({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,movs,set
         </div>}
 
         {form.etapa==="cortadora"&&<div>
-          <F label="Producto" value={form.producto} onChange={set("producto")} placeholder="Ej: Tubo PVC 2\" SDR-26 x 6m"/>
+          <F label="Producto" value={form.producto} onChange={set("producto")} placeholder="Ej: Tubo PVC 2″ SDR-26 x 6m"/>
           <div style={{marginTop:12}}><F label="Cliente (opcional)" value={form.cliente} onChange={set("cliente")} placeholder="Nombre"/></div>
           <div style={{marginTop:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <F label="Entrada (lbs)" value={form.lbsCortadora} onChange={set("lbsCortadora")} type="number" placeholder="0"/>
@@ -1593,7 +1593,7 @@ function Ordenes({ordenes,setOrdenes,productoLogs,setProductoLogs,sup,clientes,s
         <div>
           <div style={{color:B.textLight,fontSize:12,fontWeight:700,letterSpacing:.6,textTransform:"uppercase",marginBottom:10}}>Productos de la Orden</div>
           {form.items.map((it,i)=>(<div key={i} style={{background:B.bg,borderRadius:12,padding:"12px",marginBottom:8}}>
-            <div style={{marginBottom:8}}><F label={"Producto "+(i+1)} value={it.producto} onChange={v=>setItem(i,"producto",v)} placeholder="Ej: Tubo PVC 1\" SDR-26"/></div>
+            <div style={{marginBottom:8}}><F label={"Producto "+(i+1)} value={it.producto} onChange={v=>setItem(i,"producto",v)} placeholder="Ej: Tubo PVC 1″ SDR-26"/></div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
               <F label="Cantidad" value={it.cantidad} onChange={v=>setItem(i,"cantidad",v)} type="number" placeholder="0"/>
               <S label="Unidad" value={it.unidad} onChange={v=>setItem(i,"unidad",v)} options={[{v:"uds",l:"Unidades"},{v:"lbs",l:"Libras"},{v:"rollos",l:"Rollos"},{v:"bolsas",l:"Bolsas"}]}/>
