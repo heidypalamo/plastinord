@@ -1447,7 +1447,7 @@ function Ordenes({ordenes,setOrdenes,productoLogs,setProductoLogs,sup,clientes,s
       ".footer{margin-top:40px;text-align:center;font-size:10px;color:#94A3B8;border-top:1px solid #E2E8F0;padding-top:12px}"+
       "@media print{body{margin:20px}button{display:none!important}}"+
       "</style></head><body>"+
-      "<div class='header'><div style='display:flex;align-items:center'><img src='"+LOGO_IMG+"' class='logo'/><div class='co'><h2>"+EMPRESA_INFO.nombre+"</h2><p>"+EMPRESA_INFO.dir+"</p><p>📞 "+EMPRESA_INFO.tel+"</p><p>"+EMPRESA_INFO.email+" · "+EMPRESA_INFO.web+"</p>"+(EMPRESA_INFO.rnc?"<p class='rnc'>"+EMPRESA_INFO.rnc+"</p>":"")</div></div>"+
+      "<div class='header'><div style='display:flex;align-items:center'><img src='"+LOGO_IMG+"' class='logo'/><div class='co'><h2>"+EMPRESA_INFO.nombre+"</h2><p>"+EMPRESA_INFO.dir+"</p><p>📞 "+EMPRESA_INFO.tel+"</p><p>"+EMPRESA_INFO.email+" · "+EMPRESA_INFO.web+"</p>"+(EMPRESA_INFO.rnc?"<p class='rnc'>"+EMPRESA_INFO.rnc+"</p>":"")+"</div></div>"+
       "<div class='inv-box'><h1>ORDEN</h1><p>"+o.creadoEn+"</p>"+
       "<p><span class='badge' style='background:"+(o.etapa==="listo"||o.etapa==="enviado"?"#DEF7EC;color:#03543F":"#FEF3C7;color:#92400E")+"'>"+(ETIQ_ORDEN[o.etapa]||o.etapa).toUpperCase()+"</span></p>"+
       "</div></div>"+
