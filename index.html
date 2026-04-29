@@ -2883,10 +2883,11 @@ function PanelProduccion({regs,setRegs,ordenes,sup,setVista}){
           <div>
             <div style={gs.label}>Máquina</div>
             <select value={incForm.maquina} onChange={e=>setIncForm(f=>({...f,maquina:e.target.value}))} style={gs.select}>
+              {MAQUINAS.mezcla.map(m=><option key={m} value={m}>{m}</option>)}
               {MAQUINAS.extrusion.map(m=><option key={m} value={m}>{m}</option>)}
-              {MAQUINAS.impresion.map(m=><option key={m} value={m}>{m}</option>)}
-              {MAQUINAS.slitter.map(m=><option key={m} value={m}>{m}</option>)}
-              {MAQUINAS.cortadora.map(m=><option key={m} value={m}>{m}</option>)}
+              {MAQUINAS.calibracion.map(m=><option key={m} value={m}>{m}</option>)}
+              {MAQUINAS.corte.map(m=><option key={m} value={m}>{m}</option>)}
+              {MAQUINAS.empaque.map(m=><option key={m} value={m}>{m}</option>)}
             </select>
           </div>
           <div>
