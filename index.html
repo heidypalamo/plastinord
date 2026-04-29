@@ -224,8 +224,8 @@ const iS={background:"#F8FAFC",border:"1.5px solid "+B.border,borderRadius:10,pa
 // The schema (tables: registros, materiales, movimientos, ordenes, productos, lotes, clientes,
 // proveedores, facturas, pagos, gastos, cuentas_pagar, audit_log, nominas, etc.) should mirror
 // palamo's. Recommend creating the new project and running the same SQL migrations palamo uses.
-const SUPA_URL="REPLACE_ME_SUPABASE_URL";       // e.g. "https://xxxxxxx.supabase.co"
-const SUPA_KEY="REPLACE_ME_SUPABASE_ANON_KEY";  // anon public key from Supabase Settings → API
+const SUPA_URL="https://imxdnukaacwvojpnfoux.supabase.co";
+const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlteGRudWthYWN3dm9qcG5mb3V4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0NzQ3NzIsImV4cCI6MjA5MzA1MDc3Mn0.ApmsMjF0IDz8xT23CUmx0heR_Pad6LjoF854u3Ni0GA";
 const SH={"Content-Type":"application/json","apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY};
 
 async function dbSave(r){
