@@ -824,11 +824,119 @@ function LogRow({log,onDel,sup}){
   }/>);
 }
 
+// ── Landing (public site — replicates the design mockup) ──────────────────────
+function Landing({onLoginClick}){
+  const EMAIL_CONTACT="contact@plastinordhaiti.com";
+  const EMAIL_VENTE="vente@plastinordhaiti.com";
+  // Image paths — drop the three JPGs in the project root.
+  const IMG_BUILDING="./building.jpeg";
+  const IMG_PIPES="./pipes-letters.jpeg";
+  const IMG_WAREHOUSE="./warehouse.jpeg";
+
+  const ghostBtn={
+    border:"1.5px solid #000",background:"transparent",color:"#000",
+    padding:"20px 36px",fontSize:11,fontWeight:700,letterSpacing:".18em",
+    textTransform:"uppercase",cursor:"pointer",textDecoration:"none",
+    display:"inline-block",fontFamily:"inherit",textAlign:"center",
+  };
+  const heroPanel={width:"100%",aspectRatio:"21/9",minHeight:280,backgroundColor:"#1a3d5e",backgroundPosition:"center",backgroundSize:"cover",backgroundRepeat:"no-repeat"};
+  const socialA={color:"#E89B5F",textDecoration:"none",display:"inline-flex"};
+  const iconStyle={width:28,height:28,display:"block"};
+
+  // Inline SVG social icons (currentColor → orange via socialA)
+  const iconIG=<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={iconStyle}><rect x="2.5" y="2.5" width="19" height="19" rx="5"/><circle cx="12" cy="12" r="4.5"/><circle cx="17.5" cy="6.5" r="1.1" fill="currentColor" stroke="none"/></svg>;
+  const iconTW=<svg viewBox="0 0 24 24" fill="currentColor" style={iconStyle}><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/></svg>;
+  const iconFB=<svg viewBox="0 0 24 24" fill="currentColor" style={iconStyle}><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>;
+  const iconLI=<svg viewBox="0 0 24 24" fill="currentColor" style={iconStyle}><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>;
+
+  return(<div style={{background:"#fff",color:"#000",fontFamily:"'Inter',system-ui,sans-serif"}}>
+    {/* Hero — Plastinord building with login button and logo overlay */}
+    <div style={Object.assign({},heroPanel,{backgroundImage:"url("+IMG_BUILDING+")",position:"relative"})}>
+      <button onClick={onLoginClick} style={{
+        position:"absolute",top:"clamp(20px,3vw,40px)",right:"clamp(20px,4vw,60px)",zIndex:10,
+        border:"1.5px solid #000",background:"#fff",color:"#000",
+        padding:"16px 30px",fontSize:11,fontWeight:700,letterSpacing:".18em",
+        textTransform:"uppercase",cursor:"pointer",fontFamily:"inherit"
+      }}>Se connecter</button>
+      <div style={{
+        position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+        background:"#fff",padding:"clamp(8px,1.4vw,14px) clamp(16px,2.4vw,28px)",
+        boxShadow:"0 4px 18px rgba(0,0,0,.18)"
+      }}>
+        <img src={LOGO_IMG} alt="Plastinord" style={{display:"block",height:"clamp(40px,5vw,68px)",width:"auto"}}/>
+      </div>
+    </div>
+
+    {/* Section 1 — numbered headline + Contact CTA */}
+    <section style={{maxWidth:1200,margin:"0 auto",padding:"clamp(48px,8vw,90px) clamp(24px,5vw,60px)",
+      display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:40,alignItems:"center"}}>
+      <h1 style={{fontSize:"clamp(26px,3.6vw,40px)",fontWeight:800,lineHeight:1.2,margin:0,display:"flex",gap:14,alignItems:"flex-start"}}>
+        <span style={{flexShrink:0}}>1.</span>
+        <span>Une nouvelle génération d'industrie en Haïti.</span>
+      </h1>
+      <div style={{display:"flex",justifyContent:"flex-end"}}>
+        <a href="#contact" style={ghostBtn}>Contactez-nous</a>
+      </div>
+    </section>
+
+    {/* Pipes-letters image */}
+    <div style={Object.assign({},heroPanel,{backgroundImage:"url("+IMG_PIPES+")"})}/>
+
+    {/* Description */}
+    <section style={{maxWidth:880,margin:"0 auto",padding:"clamp(36px,6vw,56px) clamp(24px,5vw,60px) clamp(24px,4vw,32px)",textAlign:"center"}}>
+      <p style={{fontSize:14,lineHeight:1.7,margin:0}}>
+        Production locale de tuyaux pvc et solutions plastiques industrielles, conçues pour répondre aux standards modernes de construction et d'infrastructure.
+      </p>
+    </section>
+
+    {/* Three-column features + devis CTA */}
+    <section style={{maxWidth:1200,margin:"0 auto",padding:"clamp(24px,4vw,40px) clamp(24px,5vw,60px) clamp(60px,10vw,110px)",
+      display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:40,alignItems:"center"}}>
+      <ul style={{listStyle:"disc",paddingLeft:22,margin:0,fontSize:13,lineHeight:1.9}}>
+        <li>lignes d'extrusion performantes et modernes.</li>
+        <li>Contrôle de qualité intégré</li>
+      </ul>
+      <ul style={{listStyle:"disc",paddingLeft:22,margin:0,fontSize:13,lineHeight:1.9}}>
+        <li>Production industrielle locale</li>
+        <li>Qualité fiable et constante</li>
+        <li>Approvisionnement rapide</li>
+      </ul>
+      <div style={{display:"flex",justifyContent:"center"}}>
+        <a href={"mailto:"+EMAIL_CONTACT+"?subject=Demande%20de%20devis"} style={ghostBtn}>Demander un devis</a>
+      </div>
+    </section>
+
+    {/* Contact — split warehouse photo + dark panel */}
+    <section id="contact" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(360px,1fr))"}}>
+      <div style={{minHeight:480,backgroundColor:"#444",backgroundImage:"url("+IMG_WAREHOUSE+")",backgroundPosition:"center",backgroundSize:"cover",backgroundRepeat:"no-repeat"}}/>
+      <div style={{background:"#000",color:"#fff",padding:"clamp(48px,8vw,90px) clamp(28px,6vw,80px)",position:"relative",overflow:"hidden"}}>
+        <img src={LOGO_IMG} alt="Plastinord" style={{position:"absolute",top:"clamp(28px,4vw,52px)",right:"clamp(-20px,-2vw,0px)",width:"clamp(180px,28vw,320px)",height:"auto",opacity:.95,pointerEvents:"none"}}/>
+        <div style={{position:"relative",zIndex:1,maxWidth:"60%"}}>
+          <h2 style={{fontSize:"clamp(28px,4vw,38px)",fontWeight:800,margin:"clamp(120px,18vw,200px) 0 clamp(30px,4vw,50px)",letterSpacing:"-0.01em"}}>Contact</h2>
+          <h3 style={{fontSize:18,fontWeight:800,margin:"0 0 14px"}}>Plastinord</h3>
+          <div style={{fontSize:13,lineHeight:1.9,marginBottom:"clamp(40px,6vw,60px)"}}>
+            <a href={"mailto:"+EMAIL_CONTACT} style={{color:"#fff",textDecoration:"none",display:"block"}}>{EMAIL_CONTACT}</a>
+            <a href={"mailto:"+EMAIL_VENTE} style={{color:"#fff",textDecoration:"none",display:"block"}}>{EMAIL_VENTE}</a>
+          </div>
+          <div style={{fontSize:11,fontWeight:700,letterSpacing:".18em",marginBottom:18,color:"rgba(255,255,255,.6)"}}>BIENTÔT</div>
+          <div style={{display:"flex",gap:16}}>
+            <a href="#" aria-label="Instagram" style={socialA}>{iconIG}</a>
+            <a href="#" aria-label="Twitter" style={socialA}>{iconTW}</a>
+            <a href="#" aria-label="Facebook" style={socialA}>{iconFB}</a>
+            <a href="#" aria-label="LinkedIn" style={socialA}>{iconLI}</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>);
+}
+
 // ── Login ─────────────────────────────────────────────────────────────────────
-function Login({onLogin}){
+function Login({onLogin,onBack}){
   const [c,setC]=useState(""); const [e,setE]=useState("");
   const go=()=>{const s=SUPERVISORES.find(x=>x.codigo===c.toUpperCase().trim());if(s)onLogin(s);else{setE("Código incorrecto");setC("");}};
-  return(<div style={{minHeight:"100dvh",background:"linear-gradient(rgba(28,37,64,0.55),rgba(28,37,64,0.75)),url("+BG_LOGIN+") center/cover no-repeat",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
+  return(<div style={{minHeight:"100dvh",background:"linear-gradient(rgba(28,37,64,0.55),rgba(28,37,64,0.75)),url("+BG_LOGIN+") center/cover no-repeat",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,position:"relative"}}>
+    {onBack&&<button onClick={onBack} style={{position:"absolute",top:18,left:18,background:"rgba(255,255,255,.15)",color:"#fff",border:"1px solid rgba(255,255,255,.25)",borderRadius:10,padding:"8px 14px",fontSize:13,fontWeight:600,cursor:"pointer",backdropFilter:"blur(8px)"}}>← Retour</button>}
     <div style={{width:"100%",maxWidth:400}}>
       <div style={{textAlign:"center",marginBottom:36}}>
         <div style={{display:"inline-block",background:"rgba(255,255,255,.15)",borderRadius:16,padding:"12px 16px",backdropFilter:"blur(8px)"}}>
@@ -5783,6 +5891,7 @@ function Contribuciones({sup,gastos,setGastos}){
 // ── App ───────────────────────────────────────────────────────────────────────
 function App(){
   const [sup,setSup]=useState(null);
+  const [showLogin,setShowLogin]=useState(false);
   const [regs,setRegs]=useState([]);
   const [resinaLogs,setResinaLogs]=useState([]);
   const [mat,setMat]=useState(MATERIALES_INIT);
@@ -5972,7 +6081,10 @@ function App(){
     return ()=>clearTimeout(t);
   },[sup]);
 
-  if(!sup)return <Login onLogin={setSup}/>;
+  if(!sup){
+    if(!showLogin)return <Landing onLoginClick={()=>setShowLogin(true)}/>;
+    return <Login onLogin={setSup} onBack={()=>setShowLogin(false)}/>;
+  }
 
   const alts=mat.filter(m=>m.stockActual<=m.stockMinimo).length;
   const ordenesActivas=ordenes.filter(o=>o.etapa!=="listo").length;
