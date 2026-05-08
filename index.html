@@ -1209,7 +1209,7 @@ function Login({onLogin,onBack}){
         <div style={{display:"inline-block",background:"rgba(255,255,255,.15)",borderRadius:16,padding:"12px 16px",backdropFilter:"blur(8px)"}}>
           <img src={LOGO_IMG} alt="Plastinord Hub" style={{width:48,height:48,objectFit:"contain"}}/>
         </div>
-        <div style={{color:"rgba(255,255,255,.5)",fontSize:11,fontWeight:600,marginTop:8,letterSpacing:1}}>v5.2</div>
+        <div style={{color:"rgba(255,255,255,.5)",fontSize:11,fontWeight:600,marginTop:8,letterSpacing:1}}>v5.3</div>
       </div>
       <div style={{background:"rgba(255,255,255,.93)",borderRadius:20,padding:24,boxShadow:"0 20px 60px rgba(0,0,0,.4)",backdropFilter:"blur(12px)"}}>
         <div style={{color:B.textLight,fontSize:12,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",marginBottom:8}}>Código</div>
@@ -5072,6 +5072,109 @@ function Contabilidad({facturas,setFacturas,cuentasPagar,setCuentasPagar,gastos,
   </div>);
 }
 
+// ── Herramientas (Tools) Inventory ───────────────────────────────────────────
+const HERRAMIENTA_CATEGORIAS=["Herramientas manuales","Herramientas eléctricas","Medición","Seguridad / EPP","Repuestos","Otro"];
+const HERRAMIENTA_ESTADOS=[{v:"bueno",l:"Bueno",c:"#10B981"},{v:"regular",l:"Regular",c:"#F59E0B"},{v:"malo",l:"Malo",c:"#DC2626"},{v:"perdido",l:"Perdido",c:"#6B7280"}];
+function HerramientasPanel({sup}){
+  const SK="plastinord_herramientas";
+  const [items,setItems]=useState(()=>{try{return JSON.parse(localStorage.getItem(SK)||"[]");}catch(e){return[];}});
+  const persist=(d)=>{setItems(d);localStorage.setItem(SK,JSON.stringify(d));};
+  const [showForm,setShowForm]=useState(false);
+  const [editing,setEditing]=useState(null);
+  const [filtroCat,setFiltroCat]=useState("todas");
+  const [filtroEst,setFiltroEst]=useState("todos");
+  const [buscar,setBuscar]=useState("");
+  const F0={nombre:"",categoria:HERRAMIENTA_CATEGORIAS[0],cantidad:"1",ubicacion:"",estado:"bueno",fechaCompra:new Date().toISOString().split("T")[0],costo:"",notas:""};
+  const [form,setForm]=useState(F0);
+  const sf=k=>v=>setForm(f=>({...f,[k]:v}));
+  const openEdit=(it)=>{setEditing(it.id);setForm({nombre:it.nombre||"",categoria:it.categoria||HERRAMIENTA_CATEGORIAS[0],cantidad:String(it.cantidad||1),ubicacion:it.ubicacion||"",estado:it.estado||"bueno",fechaCompra:it.fechaCompra||"",costo:String(it.costo||""),notas:it.notas||""});setShowForm(true);};
+  const save=()=>{
+    if(!form.nombre)return;
+    const data={nombre:form.nombre,categoria:form.categoria,cantidad:Number(form.cantidad)||1,ubicacion:form.ubicacion,estado:form.estado,fechaCompra:form.fechaCompra,costo:Number(form.costo)||0,notas:form.notas};
+    if(editing){
+      persist(items.map(x=>x.id===editing?{...x,...data,updated_at:new Date().toISOString(),updated_by:sup.nombre}:x));
+      logEvent("herramienta.updated","herramientas",editing,data,sup);
+    }else{
+      const it={id:String(Date.now()),...data,created_at:new Date().toISOString(),created_by:sup.nombre};
+      persist([it,...items]);
+      logEvent("herramienta.created","herramientas",it.id,data,sup);
+    }
+    setForm(F0);setEditing(null);setShowForm(false);
+  };
+  const del=(id)=>{
+    if(!confirm("¿Eliminar esta herramienta?"))return;
+    persist(items.filter(x=>x.id!==id));
+    logEvent("herramienta.deleted","herramientas",id,{},sup);
+  };
+  const filtered=items.filter(it=>{
+    if(filtroCat!=="todas"&&it.categoria!==filtroCat)return false;
+    if(filtroEst!=="todos"&&it.estado!==filtroEst)return false;
+    if(buscar&&!(it.nombre||"").toLowerCase().includes(buscar.toLowerCase())&&!(it.ubicacion||"").toLowerCase().includes(buscar.toLowerCase()))return false;
+    return true;
+  });
+  const totalItems=items.reduce((s,it)=>s+(Number(it.cantidad)||0),0);
+  const totalCosto=items.reduce((s,it)=>s+(Number(it.costo)||0)*(Number(it.cantidad)||0),0);
+  const buenosCount=items.filter(it=>it.estado==="bueno").reduce((s,it)=>s+(Number(it.cantidad)||0),0);
+  const malosCount=items.filter(it=>it.estado==="malo").reduce((s,it)=>s+(Number(it.cantidad)||0),0);
+  const estadoColor=(e)=>(HERRAMIENTA_ESTADOS.find(x=>x.v===e)||{c:B.textLight}).c;
+  const estadoLabel=(e)=>(HERRAMIENTA_ESTADOS.find(x=>x.v===e)||{l:e}).l;
+  return(<div style={{display:"flex",flexDirection:"column",gap:12}}>
+    <div><h2 style={{color:B.textDark,fontSize:20,fontWeight:800,margin:"0 0 2px"}}>🧰 Herramientas</h2><p style={{color:B.textLight,fontSize:13,margin:0}}>Inventario de herramientas y EPP</p></div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
+      <Stat label="Total" value={totalItems} color={B.navy}/>
+      <Stat label="Buenos" value={buenosCount} color="#10B981"/>
+      <Stat label="Malos" value={malosCount} color="#DC2626"/>
+      <Stat label="Valor" value={"$"+totalCosto.toLocaleString()} color={B.amber}/>
+    </div>
+    <div style={{display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
+      <Btn ch={showForm?"✕ Cerrar":"+ Nueva Herramienta"} fn={()=>{if(showForm){setShowForm(false);setEditing(null);setForm(F0);}else setShowForm(true);}} color={showForm?B.textMid:B.amber} small/>
+      <Btn ch="📥 Excel" fn={()=>exportToExcel(items.map(it=>({Nombre:it.nombre,Categoría:it.categoria,Cantidad:it.cantidad,Ubicación:it.ubicacion,Estado:estadoLabel(it.estado),"Fecha Compra":it.fechaCompra,Costo:it.costo,Notas:it.notas})),"herramientas","Herramientas")} color={B.navy} outline small/>
+    </div>
+    {showForm&&<Card accent={B.amber} ch={<div style={{display:"flex",flexDirection:"column",gap:10}}>
+      <div style={{fontSize:14,fontWeight:800,color:B.textDark}}>{editing?"Editar":"Nueva"} herramienta</div>
+      <F label="Nombre" value={form.nombre} onChange={sf("nombre")} placeholder="Ej: Llave inglesa 12pul"/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        <S label="Categoría" value={form.categoria} onChange={sf("categoria")} options={HERRAMIENTA_CATEGORIAS.map(c=>({v:c,l:c}))}/>
+        <S label="Estado" value={form.estado} onChange={sf("estado")} options={HERRAMIENTA_ESTADOS.map(e=>({v:e.v,l:e.l}))}/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        <F label="Cantidad" value={form.cantidad} onChange={sf("cantidad")} type="number" placeholder="1"/>
+        <F label="Costo unitario" value={form.costo} onChange={sf("costo")} type="number" placeholder="0"/>
+      </div>
+      <F label="Ubicación" value={form.ubicacion} onChange={sf("ubicacion")} placeholder="Taller, almacén, máquina..."/>
+      <F label="Fecha de compra" value={form.fechaCompra} onChange={sf("fechaCompra")} type="date"/>
+      <F label="Notas" value={form.notas} onChange={sf("notas")} placeholder="..."/>
+      <Btn ch={"✓ "+(editing?"Guardar Cambios":"Agregar")} fn={save} color={B.amber} full/>
+    </div>}/>}
+    <SearchBar value={buscar} onChange={setBuscar} placeholder="Buscar nombre o ubicación..."/>
+    <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4}}>
+      <button onClick={()=>setFiltroCat("todas")} style={{background:filtroCat==="todas"?B.navy:"transparent",border:"1.5px solid "+(filtroCat==="todas"?B.navy:B.border),borderRadius:20,padding:"4px 10px",color:filtroCat==="todas"?"#fff":B.textMid,fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>Todas</button>
+      {HERRAMIENTA_CATEGORIAS.map(c=><button key={c} onClick={()=>setFiltroCat(c)} style={{background:filtroCat===c?B.navy:"transparent",border:"1.5px solid "+(filtroCat===c?B.navy:B.border),borderRadius:20,padding:"4px 10px",color:filtroCat===c?"#fff":B.textMid,fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>{c}</button>)}
+    </div>
+    <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4}}>
+      <button onClick={()=>setFiltroEst("todos")} style={{background:filtroEst==="todos"?B.teal:"transparent",border:"1.5px solid "+(filtroEst==="todos"?B.teal:B.border),borderRadius:20,padding:"4px 10px",color:filtroEst==="todos"?"#fff":B.textMid,fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>Todos</button>
+      {HERRAMIENTA_ESTADOS.map(e=><button key={e.v} onClick={()=>setFiltroEst(e.v)} style={{background:filtroEst===e.v?e.c:"transparent",border:"1.5px solid "+(filtroEst===e.v?e.c:B.border),borderRadius:20,padding:"4px 10px",color:filtroEst===e.v?"#fff":B.textMid,fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>{e.l}</button>)}
+    </div>
+    {filtered.length===0?<div style={{textAlign:"center",padding:24,color:B.textLight,fontSize:13,fontStyle:"italic"}}>{items.length===0?"Aún no hay herramientas. Agrega la primera.":"Sin resultados con estos filtros."}</div>:
+      filtered.map(it=>(<div key={it.id} style={{background:"#fff",borderRadius:12,padding:"10px 14px",border:"1.5px solid "+B.border,display:"flex",gap:10,alignItems:"center"}}>
+        <div style={{width:36,height:36,borderRadius:10,background:estadoColor(it.estado)+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:18}}>🧰</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13,fontWeight:700,color:B.textDark}}>{it.nombre}</div>
+          <div style={{fontSize:11,color:B.textLight}}>{it.categoria}{it.ubicacion?" · "+it.ubicacion:""}</div>
+        </div>
+        <div style={{textAlign:"right",flexShrink:0}}>
+          <div style={{fontSize:14,fontWeight:800,color:B.textDark}}>{it.cantidad}</div>
+          <Badge label={estadoLabel(it.estado)} color={estadoColor(it.estado)}/>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0,marginLeft:6}}>
+          <button onClick={()=>openEdit(it)} style={{background:B.teal+"18",border:"none",borderRadius:6,padding:"4px 8px",color:B.teal,fontSize:11,fontWeight:700,cursor:"pointer"}}>✎</button>
+          <button onClick={()=>del(it.id)} style={{background:B.red+"18",border:"none",borderRadius:6,padding:"4px 8px",color:B.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>🗑</button>
+        </div>
+      </div>))
+    }
+  </div>);
+}
+
 // ── Maquinarias Panel ─────────────────────────────────────────────────────────
 function MaquinariasPanel({regs,setRegs,sup,gastos,setGastos}){
   const [seccion,setSeccion]=useState("estado"); // "estado" | "gastos" | "paradas"
@@ -5569,9 +5672,10 @@ function CajaChica({sup,gastos,setGastos}){
 function ModuleSelector({sup,onSelect}){
 
   const mods=[
-    {id:"produccion",label:"Producción",desc:"Registro, almacén, materia prima y máquinas",color:B.teal,gradient:"linear-gradient(135deg,"+B.teal+","+B.tealDark+")"},
+    {id:"produccion",label:"Producción",desc:"Registro, almacén y materia prima",color:B.teal,gradient:"linear-gradient(135deg,"+B.teal+","+B.tealDark+")"},
     ...(isContador(sup)?[{id:"contabilidad",label:"Contabilidad",desc:"Facturación, gastos y resumen financiero",color:B.navy,gradient:"linear-gradient(135deg,"+B.navy+","+B.navyDark+")"}]:[]),
     {id:"equipos",label:"Equipos",desc:"Rendimiento de empleados y nómina",color:B.purple,gradient:"linear-gradient(135deg,"+B.purple+",#5B21B6)"},
+    {id:"herramientas",label:"Herramientas",desc:"Inventario de herramientas y máquinas",color:B.amber,gradient:"linear-gradient(135deg,"+B.amber+",#B45309)"},
   ];
 
   return(<div style={{padding:"20px 0",minHeight:"70vh",display:"flex",flexDirection:"column",justifyContent:"center",backgroundImage:"url('./dashboard-bg.png')",backgroundSize:"cover",backgroundPosition:"center",backgroundRepeat:"no-repeat",borderRadius:20,margin:"-16px -16px 0",padding:"36px 20px"}}>
@@ -6761,7 +6865,7 @@ function App(){
   const [productoLogs,setProductoLogs]=useState([]);
   const [modulo,setModulo]=useState(null);
   const [vistaModulo,setVistaModulo]=useState(null);
-  const enterModulo=useCallback((mod)=>{const defaults={produccion:"inicio",contabilidad:"inicio",equipos:"rendimiento"};setModulo(mod);setVistaModulo(defaults[mod]);},[]);
+  const enterModulo=useCallback((mod)=>{const defaults={produccion:"inicio",contabilidad:"inicio",equipos:"rendimiento",herramientas:"inventario"};setModulo(mod);setVistaModulo(defaults[mod]);},[]);
   const backToModules=()=>{setModulo(null);setVistaModulo(null);};
   // Auto-enter Producción for operators
   useEffect(()=>{if(sup&&sup.rol==="operador"&&!modulo)enterModulo("produccion");},[sup,modulo,enterModulo]);
@@ -6967,6 +7071,9 @@ function App(){
     {id:"registro",icon:"➕",label:"Registrar"},
     {id:"almacen",icon:"📦",label:"Almacén",badge:ordenesActivas||0},
     {id:"materiaprima",icon:"🧪",label:"M. Prima",badge:alts||0},
+  ];
+  const NAV_HERRAMIENTAS=[
+    {id:"inventario",icon:"🧰",label:"Inventario"},
     {id:"maquinas",icon:"🔧",label:"Máquinas"},
   ];
   const NAV_CONTABILIDAD=[
@@ -6982,8 +7089,8 @@ function App(){
     {id:"nomina",icon:"💵",label:"Nómina"},
     {id:"contribuciones",icon:"🏛",label:"Contrib."},
   ];
-  const activeNAV=modulo==="produccion"?NAV_PRODUCCION:modulo==="contabilidad"?NAV_CONTABILIDAD:modulo==="equipos"?NAV_EQUIPOS:[];
-  const moduloLabel=modulo==="produccion"?"PRODUCCIÓN":modulo==="contabilidad"?"CONTABILIDAD":modulo==="equipos"?"EQUIPOS":"";
+  const activeNAV=modulo==="produccion"?NAV_PRODUCCION:modulo==="contabilidad"?NAV_CONTABILIDAD:modulo==="equipos"?NAV_EQUIPOS:modulo==="herramientas"?NAV_HERRAMIENTAS:[];
+  const moduloLabel=modulo==="produccion"?"PRODUCCIÓN":modulo==="contabilidad"?"CONTABILIDAD":modulo==="equipos"?"EQUIPOS":modulo==="herramientas"?"HERRAMIENTAS":"";
   const moduloBg=B.bg;
 
   return(<div {...pullHandlers} style={{minHeight:"100dvh",background:modulo?moduloBg:B.bg,paddingBottom:modulo?84:0}}>
@@ -7037,7 +7144,10 @@ function App(){
       {!dbLoading&&modulo==="produccion"&&vistaModulo==="registro"&&<ProduccionSimple sup={sup} regs={regs} setRegs={setRegs} resinaLogs={resinaLogs} setResinaLogs={setResinaLogs} mat={mat} setMat={setMat} movs={movs} setMovs={setMovs} ordenes={ordenes} setOrdenes={setOrdenes} productoLogs={productoLogs} setProductoLogs={setProductoLogs} lotes={lotes} setLotes={setLotes}/>}
       {!dbLoading&&modulo==="produccion"&&vistaModulo==="almacen"&&<AlmacenUnificado logs={productoLogs} setLogs={setProductoLogs} ordenes={ordenes} setOrdenes={setOrdenes} productoLogs={productoLogs} setProductoLogs={setProductoLogs} sup={sup} mat={mat} setMat={setMat} movs={movs} setMovs={setMovs} regs={regs} clientes={clientes} setClientes={setClientes} facturas={facturas} setFacturas={setFacturas} pagos={pagos} setPagos={setPagos}/>}
       {!dbLoading&&modulo==="produccion"&&vistaModulo==="materiaprima"&&<Inventario mat={mat} setMat={setMat} movs={movs} setMovs={setMovs} sup={sup}/>}
-      {!dbLoading&&modulo==="produccion"&&vistaModulo==="maquinas"&&<MaquinariasPanel regs={regs} setRegs={setRegs} sup={sup} gastos={gastos} setGastos={setGastos}/>}
+
+      {/* Module: Herramientas */}
+      {!dbLoading&&modulo==="herramientas"&&vistaModulo==="inventario"&&<HerramientasPanel sup={sup}/>}
+      {!dbLoading&&modulo==="herramientas"&&vistaModulo==="maquinas"&&<MaquinariasPanel regs={regs} setRegs={setRegs} sup={sup} gastos={gastos} setGastos={setGastos}/>}
 
       {/* Module: Contabilidad */}
       {!dbLoading&&modulo==="contabilidad"&&vistaModulo==="inicio"&&<ResumenFinanciero facturas={facturas} gastos={gastos} cuentasPagar={cuentasPagar} pagos={pagos} resinaLogs={resinaLogs} movs={movs} tiposCambio={tiposCambio}/>}
