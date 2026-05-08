@@ -5683,12 +5683,15 @@ function Nomina({sup,gastos,setGastos}){
   const empAdicional=EMPLEADOS.filter(e=>e.tipo==="adicional"&&e.salario);
 
   const calcRow=(e)=>{
-    const quincenal=e.salario/2;
+    const moneda=e.moneda||"HTG";
+    const isUSD=moneda==="US$"||moneda==="USD";
+    const mensual=e.salario;            // full monthly salary (cycle is now monthly, not quincenal)
     const customSalario=getVal(e.nombre,"salarioGanado");
-    const salarioGanado=customSalario!==""?Number(customSalario):quincenal;
-    const afp=salarioGanado*AFP_RATE;
-    const ars=salarioGanado*ARS_RATE;
-    const isr=customSalario!==""?calcISR(salarioGanado*2)*(salarioGanado/(e.salario/2)):calcISR(e.salario);
+    const salarioGanado=customSalario!==""?Number(customSalario):mensual;
+    // Statutory DR-Haitian deductions only apply to HTG-paid employees (typical for USD execs/expats)
+    const afp=isUSD?0:salarioGanado*AFP_RATE;
+    const ars=isUSD?0:salarioGanado*ARS_RATE;
+    const isr=isUSD?0:calcISR(salarioGanado);
     // salario diario = salario mensual / 23.83
     const salarioDiario=e.salario/23.83;
     const horaBase=salarioDiario/8;
@@ -5710,13 +5713,15 @@ function Nomina({sup,gastos,setGastos}){
     const totalInc=montoHExtra+montoHNoct+montoHFer+montoCarga+incMonto;
     const totalDed=afp+ars+isr+otrasDed+montoComida;
     const neto=salarioGanado+totalInc-totalDed-desc;
-    return{nombre:e.nombre,cargo:e.cargo,ci:e.ci,ingreso:e.ingreso,salario:e.salario,salarioDiario,quincenal,salarioGanado,afp,ars,isr,otrasDed,totalDed,hExtra,hNoct,hFer,montoHExtra,montoHNoct,montoHFer,nCargas,montoCarga,nComida,montoComida,incMonto,totalInc,desc,neto,tipo:"nomina"};
+    return{nombre:e.nombre,cargo:e.cargo,ci:e.ci,ingreso:e.ingreso,salario:e.salario,moneda,isUSD,salarioDiario,mensual,quincenal:mensual,salarioGanado,afp,ars,isr,otrasDed,totalDed,hExtra,hNoct,hFer,montoHExtra,montoHNoct,montoHFer,nCargas,montoCarga,nComida,montoComida,incMonto,totalInc,desc,neto,tipo:"nomina"};
   };
 
   const calcAdicional=(e)=>{
-    const quincenal=e.salario/2;
+    const moneda=e.moneda||"HTG";
+    const isUSD=moneda==="US$"||moneda==="USD";
+    const mensual=e.salario;
     const customSalario=getVal(e.nombre,"salarioGanado");
-    const salarioGanado=customSalario!==""?Number(customSalario):quincenal;
+    const salarioGanado=customSalario!==""?Number(customSalario):mensual;
     const salarioDiario=e.salario/23.83;
     const nCargas=getNum(e.nombre,"cargaCamion",0);
     const precioCarga=getNum(e.nombre,"precioCarga",750);
@@ -5726,16 +5731,17 @@ function Nomina({sup,gastos,setGastos}){
     const adicional=getNum(e.nombre,"adicional",0);
     const desc=getNum(e.nombre,"descuento",0);
     const montoCarga=nCargas*precioCarga;
-    const montoComida=nComida*25+nComidaSab*150; // comida se descuenta del salario
+    const montoComida=nComida*25+nComidaSab*150;
     const totalInc=montoCarga+incMonto+adicional;
     const totalDed=montoComida;
     const neto=salarioGanado+totalInc-totalDed-desc;
-    return{nombre:e.nombre,cargo:e.cargo,ingreso:e.ingreso,salario:e.salario,salarioDiario,quincenal,salarioGanado,nCargas,montoCarga,nComida,montoComida,incMonto,adicional,totalInc,totalDed,desc,neto,tipo:"adicional"};
+    return{nombre:e.nombre,cargo:e.cargo,ingreso:e.ingreso,salario:e.salario,moneda,isUSD,salarioDiario,mensual,quincenal:mensual,salarioGanado,nCargas,montoCarga,nComida,montoComida,incMonto,adicional,totalInc,totalDed,desc,neto,tipo:"adicional"};
   };
 
   const rowsNomina=empNomina.map(calcRow);
   const rowsAdicional=empAdicional.map(calcAdicional);
-  const rowsOtros=OTROS_PAGOS.map(o=>{const quin=o.mensual/2;const netoRD=o.moneda==="US$"?quin*tasaCambio:quin;return{nombre:o.nombre,cargo:o.cargo,moneda:o.moneda,quincenal:quin,netoUSD:o.moneda==="US$"?quin:null,neto:netoRD,tipo:"otros"};});
+  // OTROS_PAGOS already supports USD; switch from quincenal to monthly cycle
+  const rowsOtros=OTROS_PAGOS.map(o=>{const mensual=o.mensual;const netoRD=o.moneda==="US$"?mensual*tasaCambio:mensual;return{nombre:o.nombre,cargo:o.cargo,moneda:o.moneda,mensual,quincenal:mensual,netoUSD:o.moneda==="US$"?mensual:null,neto:netoRD,tipo:"otros"};});
 
   const totalNomina=rowsNomina.reduce((s,r)=>s+r.neto,0);
   const totalAdicional=rowsAdicional.reduce((s,r)=>s+r.neto,0);
@@ -5774,11 +5780,21 @@ function Nomina({sup,gastos,setGastos}){
       // Persist full record to Supabase nominas table (requires table to exist)
       try{await dbSaveNomina(record);}catch(dbErr){console.error("dbSaveNomina",dbErr);}
       logEvent("nomina.processed","nominas",record.id,{periodo:periodoKey,label,total_nomina:totalNomina,total_adicional:totalAdicional,total_otros:totalOtros,grand_total:totalNomina+totalAdicional+totalOtros,empleados_nomina:rowsNomina.length,empleados_adicional:rowsAdicional.length},sup);
-      // Send to Gastos
+      // Send to Gastos — split by moneda since some employees are paid in US$ and others in HTG
       const gastoEntries=[];
-      if(totalNomina>0)gastoEntries.push({id:String(Date.now())+"n",fecha:periodoKey,categoria:"nomina",monto:totalNomina,moneda:"HTG",descripcion:"[Nómina] "+label+" — Principal ("+rowsNomina.length+" empleados)",proveedor:"",creado_por:sup.nombre,created_at:new Date().toISOString()});
-      if(totalAdicional>0)gastoEntries.push({id:String(Date.now())+"a",fecha:periodoKey,categoria:"nomina",monto:totalAdicional,moneda:"HTG",descripcion:"[Nómina] "+label+" — Adicional ("+rowsAdicional.length+" empleados)",proveedor:"",creado_por:sup.nombre,created_at:new Date().toISOString()});
-      if(totalOtros>0)gastoEntries.push({id:String(Date.now())+"o",fecha:periodoKey,categoria:"nomina",monto:totalOtros,moneda:"HTG",descripcion:"[Nómina] "+label+" — Otros Pagos",proveedor:"",creado_por:sup.nombre,created_at:new Date().toISOString()});
+      const sumByCur=(rows)=>{const r={HTG:0,US$:0};rows.forEach(x=>{const k=x.isUSD?"US$":"HTG";r[k]+=Number(x.neto)||0;});return r;};
+      const nomCur=sumByCur(rowsNomina);
+      const adiCur=sumByCur(rowsAdicional);
+      // Otros: rowsOtros stores netoUSD when applicable; use that, else neto is HTG
+      const otrCurUSD=rowsOtros.filter(r=>r.netoUSD).reduce((s,r)=>s+(Number(r.netoUSD)||0),0);
+      const otrCurHTG=rowsOtros.filter(r=>!r.netoUSD).reduce((s,r)=>s+(Number(r.neto)||0),0);
+      let seq=Date.now();
+      if(nomCur.HTG>0)gastoEntries.push({id:String(++seq)+"nh",fecha:periodoKey,categoria:"nomina",monto:nomCur.HTG,moneda:"HTG",descripcion:"[Nómina] "+label+" — Principal HTG",proveedor:"",creado_por:sup.nombre,created_at:new Date().toISOString()});
+      if(nomCur["US$"]>0)gastoEntries.push({id:String(++seq)+"nu",fecha:periodoKey,categoria:"nomina",monto:nomCur["US$"],moneda:"US$",descripcion:"[Nómina] "+label+" — Principal US$",proveedor:"",creado_por:sup.nombre,created_at:new Date().toISOString()});
+      if(adiCur.HTG>0)gastoEntries.push({id:String(++seq)+"ah",fecha:periodoKey,categoria:"nomina",monto:adiCur.HTG,moneda:"HTG",descripcion:"[Nómina] "+label+" — Adicional HTG",proveedor:"",creado_por:sup.nombre,created_at:new Date().toISOString()});
+      if(adiCur["US$"]>0)gastoEntries.push({id:String(++seq)+"au",fecha:periodoKey,categoria:"nomina",monto:adiCur["US$"],moneda:"US$",descripcion:"[Nómina] "+label+" — Adicional US$",proveedor:"",creado_por:sup.nombre,created_at:new Date().toISOString()});
+      if(otrCurHTG>0)gastoEntries.push({id:String(++seq)+"oh",fecha:periodoKey,categoria:"nomina",monto:otrCurHTG,moneda:"HTG",descripcion:"[Nómina] "+label+" — Otros Pagos HTG",proveedor:"",creado_por:sup.nombre,created_at:new Date().toISOString()});
+      if(otrCurUSD>0)gastoEntries.push({id:String(++seq)+"ou",fecha:periodoKey,categoria:"nomina",monto:otrCurUSD,moneda:"US$",descripcion:"[Nómina] "+label+" — Otros Pagos US$",proveedor:"",creado_por:sup.nombre,created_at:new Date().toISOString()});
       for(const g of gastoEntries){
         setGastos(prev=>[g,...prev]);
         try{await dbSaveGasto(g);}catch(err){console.error("dbSaveGasto",err);}
@@ -5811,11 +5827,11 @@ function Nomina({sup,gastos,setGastos}){
         <div style={{fontSize:18,fontWeight:800,color:B.textDark}}>{r.nombre}</div>
         <div style={{fontSize:13,color:B.textMid,marginBottom:8}}>{r.cargo}{r.moneda?" · "+r.moneda:""}</div>
         {r.moneda==="US$"&&<div style={{background:B.bg,borderRadius:10,padding:"10px 12px",marginBottom:8}}>
-          <div style={{fontSize:10,color:B.textLight,fontWeight:700,textTransform:"uppercase"}}>Quincenal USD</div>
-          <div style={{fontSize:20,fontWeight:800,color:B.amber}}>US$ {r.quincenal.toLocaleString()}</div>
+          <div style={{fontSize:10,color:B.textLight,fontWeight:700,textTransform:"uppercase"}}>Mensual USD</div>
+          <div style={{fontSize:20,fontWeight:800,color:B.amber}}>US$ {Number(r.mensual||r.quincenal).toLocaleString()}</div>
         </div>}
         <div style={{background:B.bg,borderRadius:10,padding:"10px 12px"}}>
-          <div style={{fontSize:10,color:B.textLight,fontWeight:700,textTransform:"uppercase"}}>{r.moneda==="US$"?"Convertido a HTG (tasa: "+tasaCambio+")":"Quincenal"}</div>
+          <div style={{fontSize:10,color:B.textLight,fontWeight:700,textTransform:"uppercase"}}>{r.moneda==="US$"?"Convertido a HTG (tasa: "+tasaCambio+")":"Mensual"}</div>
           <div style={{fontSize:20,fontWeight:800,color:B.teal}}>HTG {Number(r.neto||0).toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3})}</div>
         </div>
       </div>}/>
@@ -5840,8 +5856,8 @@ function Nomina({sup,gastos,setGastos}){
       </div>}/>
 
       <Card ch={<div>
-        <div style={{fontSize:13,fontWeight:800,color:B.navy,marginBottom:8}}>Salario Quincena</div>
-        <InputRow label={"Salario ganado (quincenal: "+fmt(r.quincenal)+")"} nombre={r.nombre} campo="salarioGanado" unit="HTG" placeholder={String(Math.round(r.quincenal))}/>
+        <div style={{fontSize:13,fontWeight:800,color:B.navy,marginBottom:8}}>Salario del Mes{r.isUSD?" (US$)":""}</div>
+        <InputRow label={"Salario ganado (mensual: "+fmt(r.mensual||r.quincenal)+")"} nombre={r.nombre} campo="salarioGanado" unit={r.isUSD?"US$":"HTG"} placeholder={String(Math.round(r.mensual||r.quincenal))}/>
         <TextRow label="Notas (descuento / ajuste)" nombre={r.nombre} campo="descuentoNotas" placeholder="Motivo del descuento o ajuste..."/>
         <div style={{padding:"6px 0",display:"flex",justifyContent:"space-between",borderTop:"1px solid "+B.border,marginTop:4}}>
           <span style={{fontSize:12,fontWeight:700,color:B.textDark}}>Salario ganado{!isAd?" bruto":""}</span>
@@ -6145,6 +6161,30 @@ function EmpleadosPanel({sup}){
   const SK_LIC="plastinord_licencias";
   const TIPOS_LICENCIA=[{v:"vacaciones",l:"Vacaciones"},{v:"medica",l:"Licencia Médica"},{v:"personal",l:"Permiso Personal"},{v:"sin_goce",l:"Licencia sin Goce"}];
   const [profiles,setProfiles]=useState(()=>{try{return JSON.parse(localStorage.getItem(SK)||"{}");}catch(e){return{};}});
+  const [salaryEdit,setSalaryEdit]=useState(null); // {nombre, salario, moneda}
+  const [,forceRender]=useState(0);
+
+  // Update an employee's salary (and optionally currency). Mutates the in-memory EMPLEADOS list and
+  // the localStorage 'plastinord_empleados_extra' record so the change survives reloads.
+  const updateSalario=(nombre,nuevoSalario,nuevaMoneda)=>{
+    const sal=Number(nuevoSalario)||0;
+    const mon=nuevaMoneda||"HTG";
+    const idx=EMPLEADOS.findIndex(e=>e.nombre===nombre);
+    if(idx<0)return;
+    const old=EMPLEADOS[idx];
+    EMPLEADOS[idx]=Object.assign({},old,{salario:sal,moneda:mon});
+    // Persist to extras (the localStorage record used at load)
+    try{
+      const extras=JSON.parse(localStorage.getItem("plastinord_empleados_extra")||"[]");
+      const ix=extras.findIndex(e=>e.nombre===nombre);
+      if(ix>=0)extras[ix]=Object.assign({},extras[ix],{salario:sal,moneda:mon});
+      else extras.push(Object.assign({},EMPLEADOS[idx]));
+      localStorage.setItem("plastinord_empleados_extra",JSON.stringify(extras));
+    }catch(e){}
+    logEvent("empleado.salary_updated","empleados",nombre,{nombre,from:{salario:old.salario||0,moneda:old.moneda||"HTG"},to:{salario:sal,moneda:mon}},sup);
+    setSalaryEdit(null);
+    forceRender(n=>n+1);
+  };
   const [licencias,setLicencias]=useState(()=>{try{return JSON.parse(localStorage.getItem(SK_LIC)||"[]");}catch(e){return[];}});
   const persistLic=(list)=>{setLicencias(list);localStorage.setItem(SK_LIC,JSON.stringify(list));};
   const [selected,setSelected]=useState(null);
@@ -6154,7 +6194,7 @@ function EmpleadosPanel({sup}){
   const [showLicForm,setShowLicForm]=useState(false);
   const [licForm,setLicForm]=useState({tipo:"vacaciones",fechaInicio:"",fechaFin:"",monto:"",fechaPago:"",notas:""});
   const [showAddEmp,setShowAddEmp]=useState(false);
-  const [newEmp,setNewEmp]=useState({nombre:"",cargo:"",area:"general",salario:"",tipo:"nomina",ingreso:new Date().toISOString().split("T")[0],ci:""});
+  const [newEmp,setNewEmp]=useState({nombre:"",cargo:"",area:"general",salario:"",moneda:"HTG",tipo:"nomina",ingreso:new Date().toISOString().split("T")[0],ci:""});
   const canManage=canManageEmpleados(sup);
   // Mark an employee as inactive: removed from active lists but historical references intact
   const removeEmpleado=(nombre)=>{
@@ -6175,14 +6215,14 @@ function EmpleadosPanel({sup}){
     if(!canManage)return alert("Sin permisos para agregar empleados");
     if(!newEmp.nombre||!newEmp.cargo)return alert("Nombre y cargo son requeridos");
     if(EMPLEADOS.find(e=>e.nombre.toLowerCase()===newEmp.nombre.toLowerCase()))return alert("Este empleado ya existe");
-    const emp={nombre:newEmp.nombre,cargo:newEmp.cargo,area:newEmp.area,salario:Number(newEmp.salario)||0,tipo:newEmp.tipo,ingreso:newEmp.ingreso,ci:newEmp.ci||""};
+    const emp={nombre:newEmp.nombre,cargo:newEmp.cargo,area:newEmp.area,salario:Number(newEmp.salario)||0,moneda:newEmp.moneda||"HTG",tipo:newEmp.tipo,ingreso:newEmp.ingreso,ci:newEmp.ci||""};
     EMPLEADOS.push(emp);
     NOMBRES_EMPLEADOS.push(emp.nombre);
     const extras=(()=>{try{return JSON.parse(localStorage.getItem("plastinord_empleados_extra")||"[]");}catch(e){return[];}})();
     extras.push(emp);
     localStorage.setItem("plastinord_empleados_extra",JSON.stringify(extras));
     logEvent("empleado.created","empleados",emp.nombre,{nombre:emp.nombre,cargo:emp.cargo,area:emp.area,salario:emp.salario,tipo:emp.tipo,ingreso:emp.ingreso},sup);
-    setNewEmp({nombre:"",cargo:"",area:"general",salario:"",tipo:"nomina",ingreso:new Date().toISOString().split("T")[0],ci:""});
+    setNewEmp({nombre:"",cargo:"",area:"general",salario:"",moneda:"HTG",tipo:"nomina",ingreso:new Date().toISOString().split("T")[0],ci:""});
     setShowAddEmp(false);
     alert("✓ Empleado "+emp.nombre+" agregado");
   };
@@ -6235,7 +6275,7 @@ function EmpleadosPanel({sup}){
             <div style={{fontSize:18,fontWeight:800,color:B.textDark}}>{e.nombre}</div>
             <div style={{fontSize:13,color:B.teal,fontWeight:700}}>{e.cargo}</div>
             {e.area&&<div style={{fontSize:11,color:B.textLight,marginTop:2}}>Area: {e.area}</div>}
-            <div style={{fontSize:11,color:B.textLight}}>Tipo: {e.tipo==="nomina"?"Nómina Principal":e.tipo==="adicional"?"Adicional":"Otros Pagos"}</div>
+            <div style={{fontSize:11,color:B.textLight}}>Tipo: {e.tipo==="nomina"?"Nómina Principal":e.tipo==="adicional"?"Adicional":"Otros Pagos"} · {e.moneda||"HTG"}</div>
           </div>
         </div>
         <div style={{display:"flex",gap:6,marginTop:10}}>
@@ -6247,8 +6287,24 @@ function EmpleadosPanel({sup}){
       {/* Key info */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
         <Card ch={<div>
-          <div style={{fontSize:10,color:B.textLight,fontWeight:700,textTransform:"uppercase"}}>SALARIO MENSUAL</div>
-          <div style={{fontSize:18,fontWeight:800,color:B.navy}}>{e.moneda==="US$"?"US$ ":"HTG "}{(e.salario||0).toLocaleString()}</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+            <div style={{fontSize:10,color:B.textLight,fontWeight:700,textTransform:"uppercase"}}>SALARIO MENSUAL</div>
+            {canManage&&salaryEdit?.nombre!==e.nombre&&<button onClick={()=>setSalaryEdit({nombre:e.nombre,salario:String(e.salario||""),moneda:e.moneda||"HTG"})} style={{background:"none",border:"none",color:B.teal,fontSize:11,fontWeight:700,cursor:"pointer",padding:0}}>✏️ Editar</button>}
+          </div>
+          {salaryEdit?.nombre===e.nombre?<div style={{display:"flex",flexDirection:"column",gap:6}}>
+            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:6}}>
+              <input type="number" value={salaryEdit.salario} onChange={ev=>setSalaryEdit(s=>({...s,salario:ev.target.value}))} placeholder="0" autoFocus style={Object.assign({},iS,{padding:"7px 9px",fontSize:14})}/>
+              <select value={salaryEdit.moneda} onChange={ev=>setSalaryEdit(s=>({...s,moneda:ev.target.value}))} style={Object.assign({},iS,{padding:"7px 9px",fontSize:13})}>
+                <option value="HTG">HTG</option>
+                <option value="US$">US$</option>
+              </select>
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <button onClick={()=>updateSalario(e.nombre,salaryEdit.salario,salaryEdit.moneda)} style={{flex:1,background:B.green,color:"#fff",border:"none",borderRadius:8,padding:"6px 10px",fontSize:12,fontWeight:700,cursor:"pointer"}}>✓ Guardar</button>
+              <button onClick={()=>setSalaryEdit(null)} style={{flex:1,background:"none",color:B.textLight,border:"1px solid "+B.border,borderRadius:8,padding:"6px 10px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancelar</button>
+            </div>
+            <div style={{fontSize:10,color:B.textLight}}>Antes: {e.moneda==="US$"?"US$ ":"HTG "}{(e.salario||0).toLocaleString()}</div>
+          </div>:<div style={{fontSize:18,fontWeight:800,color:B.navy}}>{e.moneda==="US$"?"US$ ":"HTG "}{(e.salario||0).toLocaleString()}</div>}
         </div>}/>
         <Card ch={<div>
           <div style={{fontSize:10,color:B.textLight,fontWeight:700,textTransform:"uppercase"}}>INGRESO</div>
@@ -6390,7 +6446,10 @@ function EmpleadosPanel({sup}){
         <S label="Área" value={newEmp.area} onChange={v=>setNewEmp(f=>({...f,area:v}))} options={[{v:"materia_prima",l:"Materia Prima"},{v:"mezcla",l:"Mezcla"},{v:"extrusion",l:"Extrusión"},{v:"producto_final",l:"Producto Final"},{v:"peletizadora",l:"Peletizadora"},{v:"supervision",l:"Supervisión"},{v:"general",l:"General"}]}/>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-        <F label="Salario mensual (HTG)" value={newEmp.salario} onChange={v=>setNewEmp(f=>({...f,salario:v}))} type="number" placeholder="0"/>
+        <F label={"Salario mensual ("+(newEmp.moneda||"HTG")+")"} value={newEmp.salario} onChange={v=>setNewEmp(f=>({...f,salario:v}))} type="number" placeholder="0"/>
+        <S label="Moneda" value={newEmp.moneda||"HTG"} onChange={v=>setNewEmp(f=>({...f,moneda:v}))} options={[{v:"HTG",l:"HTG (Gourdes)"},{v:"US$",l:"US$ (Dólares)"}]}/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
         <S label="Tipo" value={newEmp.tipo} onChange={v=>setNewEmp(f=>({...f,tipo:v}))} options={[{v:"nomina",l:"Nómina"},{v:"adicional",l:"Adicional"}]}/>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
