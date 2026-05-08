@@ -105,12 +105,12 @@ const NOMBRES_EMPLEADOS=EMPLEADOS.map(e=>e.nombre);
 
 // Plastinord materials — PVC compound + additives. Edit as you stock new items.
 const MATERIALES_INIT=[
-  {id:"resina_pvc",nombre:"Resina PVC",unidad:"lbs",stockActual:0,stockMinimo:2000,color:B.navy},
-  {id:"carbonato",nombre:"Carbonato de Calcio",unidad:"lbs",stockActual:0,stockMinimo:1000,color:B.teal},
+  {id:"resine_a",nombre:"Résine A - PVC powder resin regular (Blanca)",unidad:"lbs",stockActual:30864.68,stockMinimo:5000,color:B.navy},
+  {id:"resine_b",nombre:"Résine B - PVC powder superior (Beis)",unidad:"lbs",stockActual:30864.68,stockMinimo:5000,color:"#B45309"},
+  {id:"resine_c",nombre:"Résine C - PVC powder Electric (Especial Tubo Electric)",unidad:"lbs",stockActual:0,stockMinimo:2000,color:B.teal},
+  {id:"carbonato_de_calcio",nombre:"Carbonato de Calcio",unidad:"lbs",stockActual:0,stockMinimo:1000,color:B.tealDark},
   {id:"estabilizante",nombre:"Estabilizante",unidad:"lbs",stockActual:0,stockMinimo:200,color:"#7C3AED"},
-  {id:"lubricante",nombre:"Lubricante",unidad:"lbs",stockActual:0,stockMinimo:100,color:"#0D9488"},
-  {id:"pigmento",nombre:"Pigmento / Colorante",unidad:"lbs",stockActual:0,stockMinimo:50,color:B.tealDark},
-  {id:"molido",nombre:"Material Molido (recuperado)",unidad:"lbs",stockActual:0,stockMinimo:200,color:"#6B7280"}
+  {id:"material_molido_recuperado",nombre:"Material Molido (recuperado)",unidad:"lbs",stockActual:0,stockMinimo:200,color:"#6B7280"}
 ];
 const MAQUINAS={
   materia_prima:["Almacén"],
@@ -129,8 +129,15 @@ const CE={materia_prima:"#B45309",mezcla:"#7C3AED",extrusion:B.teal,producto_fin
 const MAQUINA_TODAS=[...new Set(Object.values(MAQUINAS).flat())].sort();
 const MOTIVOS_PARADA=["Mantenimiento preventivo","Falla mecánica","Falla eléctrica","Cambio de pieza","Ajuste/Calibración","Otro"];
 
-// Materia Prima catalog (for the registro entry stage). "Material Reciclado PVC" comes from the Peletizadora.
-const MATERIAS_PRIMAS=["Compuesto PVC pre-mezclado","Material Reciclado PVC","Carbonato de Calcio","Estabilizador","Pigmento","Otro"];
+// Materia Prima catalog (for the registro entry stage). "Material Molido (recuperado)" comes from Molinos / Polvo.
+const MATERIAS_PRIMAS=[
+  {id:"resine_a",nombre:"Résine A - PVC powder resin regular (Blanca)"},
+  {id:"resine_b",nombre:"Résine B - PVC powder superior (Beis)"},
+  {id:"resine_c",nombre:"Résine C - PVC powder Electric (Especial Tubo Electric)"},
+  {id:"carbonato_de_calcio",nombre:"Carbonato de Calcio"},
+  {id:"estabilizante",nombre:"Estabilizante"},
+  {id:"material_molido_recuperado",nombre:"Material Molido (recuperado)"}
+];
 
 // Producto Terminado catalog — daily production sheet (Type / Size / Spec)
 const PRODUCTOS_CATALOG=[
@@ -1202,7 +1209,7 @@ function Login({onLogin,onBack}){
         <div style={{display:"inline-block",background:"rgba(255,255,255,.15)",borderRadius:16,padding:"12px 16px",backdropFilter:"blur(8px)"}}>
           <img src={LOGO_IMG} alt="Plastinord Hub" style={{width:48,height:48,objectFit:"contain"}}/>
         </div>
-        <div style={{color:"rgba(255,255,255,.5)",fontSize:11,fontWeight:600,marginTop:8,letterSpacing:1}}>v5.1</div>
+        <div style={{color:"rgba(255,255,255,.5)",fontSize:11,fontWeight:600,marginTop:8,letterSpacing:1}}>v5.2</div>
       </div>
       <div style={{background:"rgba(255,255,255,.93)",borderRadius:20,padding:24,boxShadow:"0 20px 60px rgba(0,0,0,.4)",backdropFilter:"blur(12px)"}}>
         <div style={{color:B.textLight,fontSize:12,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",marginBottom:8}}>Código</div>
@@ -1675,7 +1682,7 @@ function applyRecipeToMezcla(receta){
   (receta.materiales||[]).forEach(m=>{
     if(m.material_id==="ldpe")out.ldpeMezcla=String(m.cantidad);
     else if(m.material_id==="mlldpe")out.mlldpeMezcla=String(m.cantidad);
-    else if(m.material_id==="material_reciclado_pvc")out.recicladoMezcla=String(m.cantidad);
+    else if(m.material_id==="material_molido_recuperado"||m.material_id==="material_reciclado_pvc")out.recicladoMezcla=String(m.cantidad);
   });
   return out;
 }
@@ -2563,7 +2570,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
   const ayerStr=(()=>{const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().split("T")[0];})();
   // ── Materia Prima entry state ──
   const [mpOpen,setMpOpen]=useState(false);
-  const [mpMaterial,setMpMaterial]=useState("Compuesto PVC pre-mezclado");
+  const [mpMaterial,setMpMaterial]=useState(MATERIAS_PRIMAS[0].id);
   const [mpCantidad,setMpCantidad]=useState("");
   const [mpProveedor,setMpProveedor]=useState("");
   const [mpLote,setMpLote]=useState("");
@@ -2572,8 +2579,9 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
     if(readOnly)return;
     if(!mpCantidad||Number(mpCantidad)<=0)return;
     const lbs=Number(mpCantidad);
-    const matName=mpMaterial||"Material";
-    const matId=matName.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
+    const sel=MATERIAS_PRIMAS.find(x=>x.id===mpMaterial)||MATERIAS_PRIMAS[0];
+    const matId=sel.id;
+    const matName=sel.nombre;
     setMat(p=>{
       const exists=p.find(x=>x.id===matId);
       if(exists)return p.map(x=>x.id===matId?Object.assign({},x,{stockActual:Math.max(0,(x.stockActual||0)-lbs)}):x);
@@ -2608,7 +2616,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
     const carbVal=Number(carbonato)||0;
     const b={id:Date.now(),fecha:mezFecha,ldpe:Number(ldpe)||0,mlldpe:Number(mlldpe)||0,reciclado:recVal,carbonato:carbVal,total:mezTotal(),maquina:mezMaq,empleado:mezEmp,notas:mezNota,loteId:loteIdUsed};
     // Deduct from Almacén
-    [["ldpe",b.ldpe],["mlldpe",b.mlldpe],["material_reciclado_pvc",recVal],["carbonato_de_calcio",carbVal]].forEach(([id,val])=>{
+    [["ldpe",b.ldpe],["mlldpe",b.mlldpe],["material_molido_recuperado",recVal],["carbonato_de_calcio",carbVal]].forEach(([id,val])=>{
       if(!val)return;
       const m=mat.find(x=>x.id===id);if(!m)return;
       setMat(p=>p.map(x=>x.id===id?Object.assign({},x,{stockActual:Math.max(0,x.stockActual-val)}):x));
@@ -2680,17 +2688,17 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
       const ptEntry={id:Date.now()+2,fecha,producto:data.producto||"Producto",cantidad:Number(data.bolsasProducidas),unidad:"uds",tipo:"entrada",destino:"",ordenId:"",notas:"Auto: Cortadora "+data.maquina,supervisor:sup.nombre};
       setProductoLogs(p=>[ptEntry,...p]);qSaveProducto(ptEntry);
     }
-    // Auto-stock: peletizadora output → materia prima (Material Reciclado PVC) for reuse in Mezcla
+    // Auto-stock: Molinos / Polvo output → materia prima (Material Molido recuperado) for reuse in Mezcla
     if(etapa==="peletizadora"&&(Number(data.peletSalida)||0)>0){
       const lbs=Number(data.peletSalida);
-      const matId="material_reciclado_pvc";
-      const matName="Material Reciclado PVC";
+      const matId="material_molido_recuperado";
+      const matName="Material Molido (recuperado)";
       setMat(p=>{
         const exists=p.find(x=>x.id===matId);
         if(exists)return p.map(x=>x.id===matId?Object.assign({},x,{stockActual:(x.stockActual||0)+lbs}):x);
         return [...p,{id:matId,nombre:matName,stockActual:lbs,stockMinimo:0,unidad:"lbs"}];
       });
-      const mv={id:Date.now()+3,tipo:"entrada",materialId:matId,materialNombre:matName,cantidad:lbs,unidad:"lbs",maquina:data.maquina||"PEL-1",fecha,supervisor:sup.nombre,notas:"Auto: "+(data.maquina||"PEL-1")+" — "+lbs+" lbs polvo reciclado"};
+      const mv={id:Date.now()+3,tipo:"entrada",materialId:matId,materialNombre:matName,cantidad:lbs,unidad:"lbs",maquina:data.maquina||"MOL-M1",fecha,supervisor:sup.nombre,notas:"Auto: "+(data.maquina||"MOL-M1")+" — "+lbs+" lbs material molido"};
       setMovs(p=>[mv,...p]);qSaveMovimiento(mv);
       logEvent("recycled.produced","inventario_movimientos",mv.id,{material:matName,lbs,maquina:data.maquina||"MOL-M1",entrada_lbs:Number(data.peletEntrada)||0,perdida:Number(data.peletDesperdicio)||0},sup);
     }
@@ -2802,7 +2810,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
         <Btn ch={mpOpen?"✕ Cerrar":"+ Registrar"} fn={()=>{if(!readOnly)setMpOpen(!mpOpen);}} color={mpOpen?B.textMid:"#B45309"} small/>
       </div>
       {mpOpen&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
-        <S label="Material" value={mpMaterial} onChange={setMpMaterial} options={MATERIAS_PRIMAS.map(m=>({v:m,l:m}))}/>
+        <S label="Material" value={mpMaterial} onChange={setMpMaterial} options={MATERIAS_PRIMAS.map(m=>({v:m.id,l:m.nombre}))}/>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <F label="Cantidad (lbs)" value={mpCantidad} onChange={setMpCantidad} type="number" placeholder="0"/>
           <F label="# Lote (opcional)" value={mpLote} onChange={setMpLote} placeholder="L-2025-01"/>
@@ -2830,7 +2838,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
         </div>
       </div>
       {/* Stock display */}
-      {mezOpen&&(()=>{const recStock=(mat.find(m=>m.id==="material_reciclado_pvc")||{stockActual:0}).stockActual;const carbStock=(mat.find(m=>m.id==="carbonato_de_calcio")||{stockActual:0}).stockActual;return(<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:12}}>
+      {mezOpen&&(()=>{const recStock=(mat.find(m=>m.id==="material_molido_recuperado")||{stockActual:0}).stockActual;const carbStock=(mat.find(m=>m.id==="carbonato_de_calcio")||{stockActual:0}).stockActual;return(<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:12}}>
         <div style={{background:B.teal+"12",borderRadius:10,padding:"8px 10px",border:"1px solid "+B.teal+"30"}}>
           <div style={{fontSize:10,color:B.textLight,fontWeight:700,textTransform:"uppercase"}}>LDPE</div>
           <div style={{fontSize:16,fontWeight:800,color:B.teal}}>{ldpeStock.toLocaleString()}<span style={{fontSize:10,color:B.textLight}}> lbs</span></div>
@@ -3161,7 +3169,7 @@ function StageCard({stage,regs,onSave,onDelete,sup,ordenes,fechaVer,readOnly,lot
         <F label="Polvo producido (lbs)" value={peletSalida} onChange={setPeletSalida} type="number" placeholder="0"/>
       </div>}
       {isPelet&&<F label="Pérdida (lbs)" value={peletDesp} onChange={setPeletDesp} type="number" placeholder="0"/>}
-      {isPelet&&<div style={{background:"#0D948815",borderRadius:8,padding:"9px 12px",fontSize:12,color:"#0D9488",fontWeight:600}}>🔄 El polvo producido se agregará a materia prima como "Material Reciclado PVC" — disponible para reusar en Mezcla</div>}
+      {isPelet&&<div style={{background:"#0D948815",borderRadius:8,padding:"9px 12px",fontSize:12,color:"#0D9488",fontWeight:600}}>🔄 El polvo producido se agregará a materia prima como "Material Molido (recuperado)" — disponible para reusar en Mezcla</div>}
       {!isExt&&!isPelet&&!isPF&&<S label="Producto" value={producto} onChange={setProducto} options={prodOpts}/>}
       <F label="Desperdicio (lbs)" value={desp} onChange={setDesp} type="number" placeholder="0"/>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
