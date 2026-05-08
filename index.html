@@ -1191,7 +1191,7 @@ function Login({onLogin,onBack}){
         <div style={{display:"inline-block",background:"rgba(255,255,255,.15)",borderRadius:16,padding:"12px 16px",backdropFilter:"blur(8px)"}}>
           <img src={LOGO_IMG} alt="Plastinord Hub" style={{width:48,height:48,objectFit:"contain"}}/>
         </div>
-        <div style={{color:"rgba(255,255,255,.5)",fontSize:11,fontWeight:600,marginTop:8,letterSpacing:1}}>v3.0</div>
+        <div style={{color:"rgba(255,255,255,.5)",fontSize:11,fontWeight:600,marginTop:8,letterSpacing:1}}>v4.0</div>
       </div>
       <div style={{background:"rgba(255,255,255,.93)",borderRadius:20,padding:24,boxShadow:"0 20px 60px rgba(0,0,0,.4)",backdropFilter:"blur(12px)"}}>
         <div style={{color:B.textLight,fontSize:12,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",marginBottom:8}}>Código</div>
@@ -2588,28 +2588,16 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
   const [mezNota,setMezNota]=useState("");
   const [mezLoteId,setMezLoteId]=useState("");
   const [mezFecha,setMezFecha]=useState(hoyStr);
-  const [mezRecetaId,setMezRecetaId]=useState("");
   // Keep mezcla fecha in sync with date-view picker
   React.useEffect(()=>{setMezFecha(fechaVer);},[fechaVer]);
 
   const mezTotal=()=>(Number(ldpe)||0)+(Number(mlldpe)||0)+(Number(reciclado)||0);
-  const aplicarReceta=(recId)=>{
-    setMezRecetaId(recId);
-    if(!recId){setLdpe("");setMlldpe("");setReciclado("");return;}
-    const r=(recetas||[]).find(x=>String(x.id)===String(recId));
-    if(!r)return;
-    const patch=applyRecipeToMezcla(r);
-    setLdpe(patch.ldpeMezcla||"");
-    setMlldpe(patch.mlldpeMezcla||"");
-    setReciclado(patch.recicladoMezcla||"");
-  };
   const saveMezcla=()=>{
     if(readOnly)return;
     if(!mezTotal())return;
     const loteIdUsed=mezLoteId||null;
     const recVal=Number(reciclado)||0;
-    const recetaUsada=mezRecetaId?(recetas||[]).find(x=>String(x.id)===String(mezRecetaId)):null;
-    const b={id:Date.now(),fecha:mezFecha,ldpe:Number(ldpe)||0,mlldpe:Number(mlldpe)||0,reciclado:recVal,total:mezTotal(),maquina:mezMaq,empleado:mezEmp,notas:(recetaUsada?"Receta: "+recetaUsada.nombre+(mezNota?" · "+mezNota:""):mezNota),loteId:loteIdUsed,recetaId:recetaUsada?recetaUsada.id:null,recetaNombre:recetaUsada?recetaUsada.nombre:null};
+    const b={id:Date.now(),fecha:mezFecha,ldpe:Number(ldpe)||0,mlldpe:Number(mlldpe)||0,reciclado:recVal,total:mezTotal(),maquina:mezMaq,empleado:mezEmp,notas:mezNota,loteId:loteIdUsed};
     // Deduct from Almacén
     [["ldpe",b.ldpe],["mlldpe",b.mlldpe],["material_reciclado_pvc",recVal]].forEach(([id,val])=>{
       if(!val)return;
@@ -2633,7 +2621,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
         return upd;
       }));
     }
-    setLdpe("");setMlldpe("");setReciclado("");setMezNota("");setMezLoteId("");setMezRecetaId("");setMezOpen(false);
+    setLdpe("");setMlldpe("");setReciclado("");setMezNota("");setMezLoteId("");setMezOpen(false);
   };
   // Create a new lote (batch) — called from Mezcla card
   const crearNuevoLote=()=>{
@@ -2848,17 +2836,6 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
         </div>
       </div>);})()}
       {mezOpen&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
-        {/* Recipe selector */}
-        {(recetas||[]).filter(r=>r.activa!==false).length>0&&<div style={{background:B.teal+"08",border:"1px dashed "+B.teal+"55",borderRadius:10,padding:"10px 12px"}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <span style={{fontSize:12,fontWeight:800,color:B.teal}}>📋 Aplicar receta</span>
-          </div>
-          <select value={mezRecetaId} onChange={e=>aplicarReceta(e.target.value)} style={Object.assign({},iS,{padding:"9px 10px",fontSize:13})}>
-            <option value="">— Sin receta —</option>
-            {(recetas||[]).filter(r=>r.activa!==false).map(r=>{const m=(r.materiales||[]).filter(x=>["ldpe","mlldpe","material_reciclado_pvc"].includes(x.material_id));const total=m.reduce((s,x)=>s+(Number(x.cantidad)||0),0);return(<option key={r.id} value={r.id}>{r.nombre} ({total.toFixed(0)} lbs)</option>);})}
-          </select>
-          {mezRecetaId&&<div style={{marginTop:8,fontSize:11,color:B.textLight}}>✓ Cantidades pre-cargadas. Puedes ajustarlas antes de guardar.</div>}
-        </div>}
         <F label="Fecha" value={mezFecha} onChange={setMezFecha} type="date"/>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
           <F label="LDPE (lbs)" value={ldpe} onChange={setLdpe} type="number" placeholder="0"/>
@@ -2882,7 +2859,6 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
         <div>
           <span style={{color:B.textDark,fontSize:13,fontWeight:700}}>{(Number(b.total)||0).toLocaleString()} lbs</span>
           <span style={{color:B.textLight,fontSize:11,marginLeft:8}}>{b.empleado||""}</span>
-          {b.recetaNombre&&<span style={{background:B.teal+"22",color:B.teal,fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:10,marginLeft:6}}>📋 {b.recetaNombre}</span>}
         </div>
         <div style={{fontSize:11,color:B.textLight}}>{b.ldpe||0}L / {b.mlldpe||0}M{Number(b.reciclado)>0?" / "+b.reciclado+"R":""}{b.loteId?" · L"+((lotes||[]).find(L=>String(L.id)===String(b.loteId))||{}).numero:""}</div>
       </div>))}
@@ -6920,7 +6896,6 @@ function App(){
     {id:"facturacion",icon:"🧾",label:"Facturación"},
     {id:"gastos",icon:"💳",label:"Gastos"},
     {id:"cajachica",icon:"💼",label:"Caja Chica"},
-    {id:"cambio",icon:"💱",label:"Cambio"},
     {id:"auditoria",icon:"📜",label:"Auditoría"},
   ];
   const NAV_EQUIPOS=[
@@ -6989,7 +6964,6 @@ function App(){
 
       {/* Module: Contabilidad */}
       {!dbLoading&&modulo==="contabilidad"&&vistaModulo==="inicio"&&<ResumenFinanciero facturas={facturas} gastos={gastos} cuentasPagar={cuentasPagar} pagos={pagos} resinaLogs={resinaLogs} movs={movs} tiposCambio={tiposCambio}/>}
-      {!dbLoading&&modulo==="contabilidad"&&vistaModulo==="cambio"&&<TiposCambio tiposCambio={tiposCambio} setTiposCambio={setTiposCambio} sup={sup}/>}
       {!dbLoading&&modulo==="contabilidad"&&vistaModulo==="auditoria"&&<AuditLog sup={sup}/>}
       {!dbLoading&&modulo==="contabilidad"&&vistaModulo==="facturacion"&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
         <Facturacion facturas={facturas} setFacturas={setFacturas} productoLogs={productoLogs} setProductoLogs={setProductoLogs} ordenes={ordenes} sup={sup} pagos={pagos} setPagos={setPagos} clientes={clientes} setClientes={setClientes}/>
