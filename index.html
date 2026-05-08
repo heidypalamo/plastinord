@@ -2548,7 +2548,7 @@ function ProductoTerminado({logs,setLogs,ordenes,sup,regs,clientes,setClientes,f
 }
 
 // ── Producción Simple (replaces Flujo) ───────────────────────────────────────
-function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,movs,setMovs,ordenes,setOrdenes,productoLogs,setProductoLogs,lotes,setLotes,recetas}){
+function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,movs,setMovs,ordenes,setOrdenes,productoLogs,setProductoLogs,lotes,setLotes}){
   // ── Date navigation (view any day) ──
   const hoyStr=new Date().toISOString().split("T")[0];
   const [fechaVer,setFechaVer]=useState(hoyStr);
@@ -2872,7 +2872,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
     </div>
 
     {/* ── Stage Cards ── */}
-    {STAGES.map(stg=>(<StageCard key={stg.id} stage={stg} regs={regs} onSave={saveReg} onDelete={(id)=>{setRegs(p=>p.filter(x=>x.id!==id));dbDelete(id);}} sup={sup} ordenes={ordenes} fechaVer={fechaVer} readOnly={readOnly} lotes={lotes} recetas={recetas} resinaLogs={resinaLogs}/>))}
+    {STAGES.map(stg=>(<StageCard key={stg.id} stage={stg} regs={regs} onSave={saveReg} onDelete={(id)=>{setRegs(p=>p.filter(x=>x.id!==id));dbDelete(id);}} sup={sup} ordenes={ordenes} fechaVer={fechaVer} readOnly={readOnly} lotes={lotes} resinaLogs={resinaLogs}/>))}
 
     {/* ── Actividad del día ── */}
     {(()=>{
@@ -2919,7 +2919,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
   </div>);
 }
 
-function StageCard({stage,regs,onSave,onDelete,sup,ordenes,fechaVer,readOnly,lotes,recetas,resinaLogs}){
+function StageCard({stage,regs,onSave,onDelete,sup,ordenes,fechaVer,readOnly,lotes,resinaLogs}){
   const {id:etapa,label,icon,color:col,fields}=stage;
   const isExt=etapa==="extrusion";
   const isCort=etapa==="cortadora";
@@ -2955,7 +2955,6 @@ function StageCard({stage,regs,onSave,onDelete,sup,ordenes,fechaVer,readOnly,lot
   // Batch tracking (extrusion only)
   const [batchNumber,setBatchNumber]=useState("");
   const [formula,setFormula]=useState("");
-  const [recetaId,setRecetaId]=useState("");
   const [loteResinaUsado,setLoteResinaUsado]=useState("");
   const [aditivos,setAditivos]=useState([]);
   const [piesProducidos,setPiesProducidos]=useState("");
@@ -2997,7 +2996,7 @@ function StageCard({stage,regs,onSave,onDelete,sup,ordenes,fechaVer,readOnly,lot
   const empOpts=[{v:"",l:"— Seleccionar —"},...NOMBRES_EMPLEADOS.map(n=>({v:n,l:n}))];
   const prodOpts=[{v:"",l:"— Producto —"},...[...new Set((ordenes||[]).flatMap(o=>(o.items||[]).map(it=>it.producto)).filter(Boolean))].map(p=>({v:p,l:p})),{v:"Otro",l:"Otro"}];
 
-  const reset=()=>{setLbsIn("");setLbsOut("");setRollos("");setTamano("9.5");setRollosUsados("");setBolsas("");setProducto("");setDesp("");setEmp("");setMaq((MAQUINAS[etapa]||[""])[0]);setTurno("☀️ Turno Día");setNotas("");setFecha(activeFecha);setPeletEntrada("");setPeletSalida("");setPeletDesp("");setOrdenId("");setLoteId("");setBatchNumber("");setFormula("");setRecetaId("");setLoteResinaUsado("");setAditivos([]);setPiesProducidos("");setPfCantidad("");setPfUnidad("uds");};
+  const reset=()=>{setLbsIn("");setLbsOut("");setRollos("");setTamano("9.5");setRollosUsados("");setBolsas("");setProducto("");setDesp("");setEmp("");setMaq((MAQUINAS[etapa]||[""])[0]);setTurno("☀️ Turno Día");setNotas("");setFecha(activeFecha);setPeletEntrada("");setPeletSalida("");setPeletDesp("");setOrdenId("");setLoteId("");setBatchNumber("");setFormula("");setLoteResinaUsado("");setAditivos([]);setPiesProducidos("");setPfCantidad("");setPfUnidad("uds");};
 
   // Auto-fill batch number when extrusion form opens
   React.useEffect(()=>{if(showForm&&isExt&&!batchNumber){setBatchNumber(genBatchNumber(fecha,regs));}},[showForm,isExt,fecha]);
@@ -3016,19 +3015,6 @@ function StageCard({stage,regs,onSave,onDelete,sup,ordenes,fechaVer,readOnly,lot
   const onPvcDiamChange=(v)=>{setPvcDiametro(v);setProducto("Tubo PVC "+v+" "+pvcTipo+" x "+pvcLargo);};
   const onPvcLargoChange=(v)=>{setPvcLargo(v);setProducto("Tubo PVC "+pvcDiametro+" "+pvcTipo+" x "+v);};
 
-  // Apply recipe (sets formula and pre-fills batch context)
-  const onRecetaChange=(rid)=>{
-    setRecetaId(rid);
-    if(!rid)return;
-    const r=(recetas||[]).find(x=>String(x.id)===String(rid));
-    if(!r)return;
-    if(r.tipo)setFormula(r.tipo);
-    if(r.diametro){
-      setPvcDiametro(r.diametro);
-      setProducto("Tubo PVC "+r.diametro+" "+(r.tipo||pvcTipo)+" x "+pvcLargo);
-    }
-  };
-
   const handleSave=()=>{
     if(readOnly)return;
     const data={fecha,empleado:emp,maquina:maq,turno,notas,desperdicio:Number(desp)||0,ordenId:ordenId||null,loteId:loteId||null};
@@ -3038,7 +3024,6 @@ function StageCard({stage,regs,onSave,onDelete,sup,ordenes,fechaVer,readOnly,lot
       // Batch tracking
       data.batchNumber=batchNumber||genBatchNumber(fecha,regs);
       data.formula=formula||"";
-      data.recetaId=recetaId||null;
       data.loteResinaUsado=loteResinaUsado||"";
       data.aditivos=aditivos||[];
       data.piesProducidos=Number(piesProducidos)||0;
@@ -3123,10 +3108,7 @@ function StageCard({stage,regs,onSave,onDelete,sup,ordenes,fechaVer,readOnly,lot
           <S label="Largo" value={pvcLargo} onChange={onPvcLargoChange} options={PVC_LARGOS.map(L=>({v:L,l:L}))}/>
         </div>
         <div style={{background:col+"10",border:"1px solid "+col+"33",borderRadius:8,padding:"7px 11px",fontSize:11,color:col,fontWeight:700}}>⚙️ Tubo PVC {pvcDiametro} {pvcTipo} x {pvcLargo}</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <S label="Fórmula" value={formula} onChange={setFormula} options={FORMULAS_PVC.map(f=>({v:f,l:f}))}/>
-          <S label="Receta (opc.)" value={recetaId} onChange={onRecetaChange} options={[{v:"",l:"— Sin receta —"},...((recetas||[]).filter(r=>r.activa!==false).map(r=>({v:String(r.id),l:r.nombre})))]}/>
-        </div>
+        <S label="Fórmula" value={formula} onChange={setFormula} options={FORMULAS_PVC.map(f=>({v:f,l:f}))}/>
         <S label="Lote de Resina" value={loteResinaUsado} onChange={setLoteResinaUsado} options={[{v:"",l:"— Ninguno —"},...((resinaLogs||[]).slice(0,15).filter(b=>b.lote||b.id).map(b=>({v:String(b.lote||b.id),l:(b.lote||"Lote-"+String(b.id).slice(-4))+" ("+(b.fecha||"?")+", "+(b.total||0)+" lbs)"})))]}/>
         <div>
           <div style={{fontSize:11,fontWeight:700,color:B.textLight,letterSpacing:.6,textTransform:"uppercase",marginBottom:6}}>Aditivos usados</div>
@@ -6886,7 +6868,6 @@ function App(){
   const NAV_PRODUCCION=[
     {id:"inicio",icon:"📊",label:"Inicio"},
     {id:"registro",icon:"➕",label:"Registrar"},
-    {id:"recetas",icon:"📋",label:"Recetas"},
     {id:"almacen",icon:"📦",label:"Almacén",badge:ordenesActivas||0},
     {id:"materiaprima",icon:"🧪",label:"M. Prima",badge:alts||0},
     {id:"maquinas",icon:"🔧",label:"Máquinas"},
@@ -6956,8 +6937,7 @@ function App(){
       {/* Module: Producción */}
       {!dbLoading&&modulo==="produccion"&&vistaModulo==="inicio"&&isOp&&<PanelProduccion regs={regs} setRegs={setRegs} ordenes={ordenes} sup={sup} setVista={setVistaModulo}/>}
       {!dbLoading&&modulo==="produccion"&&vistaModulo==="inicio"&&!isOp&&<Dashboard regs={regs} mat={mat} ordenes={ordenes} resinaLogs={resinaLogs} setVista={setVistaModulo} productoLogs={productoLogs}/>}
-      {!dbLoading&&modulo==="produccion"&&vistaModulo==="registro"&&<ProduccionSimple sup={sup} regs={regs} setRegs={setRegs} resinaLogs={resinaLogs} setResinaLogs={setResinaLogs} mat={mat} setMat={setMat} movs={movs} setMovs={setMovs} ordenes={ordenes} setOrdenes={setOrdenes} productoLogs={productoLogs} setProductoLogs={setProductoLogs} lotes={lotes} setLotes={setLotes} recetas={recetas}/>}
-      {!dbLoading&&modulo==="produccion"&&vistaModulo==="recetas"&&<Recetas recetas={recetas} setRecetas={setRecetas} mat={mat} sup={sup}/>}
+      {!dbLoading&&modulo==="produccion"&&vistaModulo==="registro"&&<ProduccionSimple sup={sup} regs={regs} setRegs={setRegs} resinaLogs={resinaLogs} setResinaLogs={setResinaLogs} mat={mat} setMat={setMat} movs={movs} setMovs={setMovs} ordenes={ordenes} setOrdenes={setOrdenes} productoLogs={productoLogs} setProductoLogs={setProductoLogs} lotes={lotes} setLotes={setLotes}/>}
       {!dbLoading&&modulo==="produccion"&&vistaModulo==="almacen"&&<AlmacenUnificado logs={productoLogs} setLogs={setProductoLogs} ordenes={ordenes} setOrdenes={setOrdenes} productoLogs={productoLogs} setProductoLogs={setProductoLogs} sup={sup} mat={mat} setMat={setMat} movs={movs} setMovs={setMovs} regs={regs} clientes={clientes} setClientes={setClientes} facturas={facturas} setFacturas={setFacturas} pagos={pagos} setPagos={setPagos}/>}
       {!dbLoading&&modulo==="produccion"&&vistaModulo==="materiaprima"&&<Inventario mat={mat} setMat={setMat} movs={movs} setMovs={setMovs} sup={sup}/>}
       {!dbLoading&&modulo==="produccion"&&vistaModulo==="maquinas"&&<MaquinariasPanel regs={regs} setRegs={setRegs} sup={sup} gastos={gastos} setGastos={setGastos}/>}
