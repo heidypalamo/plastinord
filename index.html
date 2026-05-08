@@ -113,30 +113,69 @@ const MATERIALES_INIT=[
   {id:"molido",nombre:"Material Molido (recuperado)",unidad:"lbs",stockActual:0,stockMinimo:200,color:"#6B7280"}
 ];
 const MAQUINAS={
+  materia_prima:["Almacén"],
   mezcla:["MEZ-1"],
   extrusion:["EXT-1","EXT-2"],
-  calibracion:["CAL-1","CAL-2"],
-  corte:["COR-1","COR-2"],
-  empaque:["EMP-1"],
-  maquina:["MEZ-1","EXT-1","EXT-2","CAL-1","CAL-2","COR-1","COR-2","EMP-1"]
+  producto_final:["EMP-1"],
+  peletizadora:["PEL-1","CRUSH-1"],
+  maquina:["MEZ-1","EXT-1","EXT-2","EMP-1","PEL-1","CRUSH-1"]
 };
-// Production flow stages — Plastinord PVC pipe: Mezcla → Extrusión → Calibración → Corte → Empaque
-const ETAPAS=["mezcla","extrusion","calibracion","corte","empaque","maquina"];
-const ETIQUETAS={mezcla:"Mezcla",extrusion:"Extrusión",calibracion:"Calibración",corte:"Corte",empaque:"Empaque",maquina:"Máquina"};
-const ICONOS={mezcla:"🧪",extrusion:"⚙️",calibracion:"📏",corte:"✂️",empaque:"📦",maquina:"🔧"};
-const CE={mezcla:"#7C3AED",extrusion:B.teal,calibracion:"#0D9488",corte:"#4E7C59",empaque:"#B45309",maquina:"#6B7280"};
+// Production flow stages — Plastinord PVC pipe: Materia Prima → Mezcla (opcional) → Extrusión → Producto Final
+// + Peletizadora (side flow: desperdicio → polvo reciclado → reusado en Mezcla)
+const ETAPAS=["materia_prima","mezcla","extrusion","producto_final","peletizadora","maquina"];
+const ETIQUETAS={materia_prima:"Materia Prima",mezcla:"Mezcla",extrusion:"Extrusión",producto_final:"Producto Final",peletizadora:"Peletizadora",maquina:"Máquina"};
+const ICONOS={materia_prima:"📦",mezcla:"🧪",extrusion:"⚙️",producto_final:"✓",peletizadora:"🔄",maquina:"🔧"};
+const CE={materia_prima:"#B45309",mezcla:"#7C3AED",extrusion:B.teal,producto_final:B.green,peletizadora:"#0D9488",maquina:"#6B7280"};
 const MAQUINA_TODAS=[...new Set(Object.values(MAQUINAS).flat())].sort();
 const MOTIVOS_PARADA=["Mantenimiento preventivo","Falla mecánica","Falla eléctrica","Cambio de pieza","Ajuste/Calibración","Otro"];
 
+// Materia Prima catalog (for the registro entry stage). "Material Reciclado PVC" comes from the Peletizadora.
+const MATERIAS_PRIMAS=["Compuesto PVC pre-mezclado","LDPE","MLLDPE","Material Reciclado PVC","Estabilizador","Pigmento","Otro"];
+
+// PVC formulas / recipes used in extrusion runs
+const FORMULAS_PVC=[
+  "Presión",
+  "Semi Presión",
+  "Drenaje",
+  "Presión SDR-26",
+  "Presión SCH-40",
+  "Eléctrico",
+  "Personalizada",
+  "Otro"
+];
+// Common additives
+const ADITIVOS_DEFAULT=[
+  "Estabilizador térmico",
+  "Lubricante interno",
+  "Lubricante externo",
+  "Pigmento blanco (TiO2)",
+  "Pigmento gris",
+  "Carbonato de calcio",
+  "Modificador de impacto"
+];
+
+// Batch number generator: B-YYMMDD-NN (NN is per-day extrusion sequence)
+function genBatchNumber(fecha,regs){
+  const d=fecha?new Date(fecha+"T00:00:00"):new Date();
+  const yy=String(d.getFullYear()).slice(-2);
+  const mm=String(d.getMonth()+1).padStart(2,"0");
+  const dd=String(d.getDate()).padStart(2,"0");
+  const prefix="B-"+yy+mm+dd+"-";
+  const sameDay=(regs||[]).filter(r=>r.etapa==="extrusion"&&r.batchNumber&&r.batchNumber.startsWith(prefix));
+  const nums=sameDay.map(r=>{const m=r.batchNumber.match(/-(\d+)$/);return m?Number(m[1]):0;});
+  const next=(nums.length?Math.max(...nums):0)+1;
+  return prefix+String(next).padStart(2,"0");
+}
+
 // ── Production Flow (Flujo) Constants ────────────────────────────────────────
-// Plastinord PVC pipe flow: Mezcla → Extrusión → Calibración → Corte → Empaque
-const PROD_ETAPAS=["mezcla","extrusion","calibracion","corte","empaque"];
-const PROD_ETIQUETAS={mezcla:"Mezcla",extrusion:"Extrusión",calibracion:"Calibración",corte:"Corte",empaque:"Empaque"};
-const PROD_ICONOS={mezcla:"🧪",extrusion:"⚙️",calibracion:"📏",corte:"✂️",empaque:"📦"};
-const PROD_COLORES={mezcla:"#7C3AED",extrusion:B.teal,calibracion:"#0D9488",corte:"#4E7C59",empaque:"#B45309"};
+// Plastinord PVC pipe flow: Materia Prima → Mezcla (opcional) → Extrusión → Producto Final
+const PROD_ETAPAS=["materia_prima","mezcla","extrusion","producto_final"];
+const PROD_ETIQUETAS={materia_prima:"Materia Prima",mezcla:"Mezcla",extrusion:"Extrusión",producto_final:"Producto Final"};
+const PROD_ICONOS={materia_prima:"📦",mezcla:"🧪",extrusion:"⚙️",producto_final:"✓"};
+const PROD_COLORES={materia_prima:"#B45309",mezcla:"#7C3AED",extrusion:B.teal,producto_final:B.green};
 const LOTE_STAGE_INIT=()=>({entries:[]});
-const newLoteEtapas=()=>({mezcla:LOTE_STAGE_INIT(),extrusion:LOTE_STAGE_INIT(),calibracion:LOTE_STAGE_INIT(),corte:LOTE_STAGE_INIT(),empaque:LOTE_STAGE_INIT()});
-const PREV_STAGE={mezcla:null,extrusion:"mezcla",calibracion:"extrusion",corte:"calibracion",empaque:"corte"};
+const newLoteEtapas=()=>({materia_prima:LOTE_STAGE_INIT(),mezcla:LOTE_STAGE_INIT(),extrusion:LOTE_STAGE_INIT(),producto_final:LOTE_STAGE_INIT()});
+const PREV_STAGE={materia_prima:null,mezcla:"materia_prima",extrusion:"mezcla",producto_final:"extrusion"};
 const stgTotal=(stg,field)=>(stg.entries||[]).reduce((s,e)=>s+(Number(e[field])||0),0);
 const stgTotalOut=stg=>stgTotal(stg,"lbs_out");
 const stgTotalIn=stg=>stgTotal(stg,"lbs_in");
@@ -147,18 +186,51 @@ function migrateStage(stg){
   return{entries:[]};
 }
 
-// Plastinord PVC pipe catalog. Format suggestion: "Tubo PVC <diámetro> <SDR/cédula> <largo>"
-const PRODUCTOS_DEFAULT=[
-  "Tubo PVC ½\" SDR-26 x 6m","Tubo PVC ¾\" SDR-26 x 6m",
-  "Tubo PVC 1\" SDR-26 x 6m","Tubo PVC 1½\" SDR-26 x 6m",
-  "Tubo PVC 2\" SDR-26 x 6m","Tubo PVC 3\" SDR-26 x 6m",
-  "Tubo PVC 4\" SDR-26 x 6m","Tubo PVC 1\" SCH-40 x 6m",
-  "Tubo PVC 2\" SCH-40 x 6m","Otro"
+// Plastinord PVC pipe catalog. Grouped by tipo (Presión / Semi Presión / Drenaje, plus SDR/SCH variants).
+// Format: "Tubo PVC <diámetro> <tipo> x <largo>"
+const PVC_TIPOS=["Presión","Semi Presión","Drenaje","SDR-26","SCH-40"];
+const PVC_TAMANOS={
+  "Presión":["½\"","¾\"","1\"","1¼\"","1½\"","2\"","2½\"","3\"","4\""],
+  "Semi Presión":["½\"","¾\"","1\"","1¼\"","1½\"","2\"","2½\"","3\""],
+  "Drenaje":["2\"","3\"","4\"","6\"","8\""],
+  "SDR-26":["½\"","¾\"","1\"","1¼\"","1½\"","2\"","2½\"","3\"","4\"","6\""],
+  "SCH-40":["½\"","¾\"","1\"","1¼\"","1½\"","2\"","2½\"","3\"","4\"","6\"","8\""]
+};
+const PVC_LARGOS=["6m","3m"];
+const buildPVCCatalog=()=>{
+  const out=[];
+  PVC_TIPOS.forEach(t=>PVC_TAMANOS[t].forEach(d=>PVC_LARGOS.forEach(L=>{
+    out.push("Tubo PVC "+d+" "+t+" x "+L);
+  })));
+  out.push("Otro");
+  return out;
+};
+// Products that have been sold so far (rendered first in product dropdowns).
+// Update this list as new SKUs enter the sales catalog.
+const PRODUCTOS_VENDIDOS=[
+  "Tubo PVC ½\" Presión x 6m",
+  "Tubo PVC ¾\" Presión x 6m",
+  "Tubo PVC 1\" Presión x 6m",
+  "Tubo PVC 2\" Presión x 6m",
+  "Tubo PVC 4\" Presión x 6m",
+  "Tubo PVC 2\" Semi Presión x 6m",
+  "Tubo PVC 2\" Drenaje x 6m"
 ];
+// Full catalog: vendidos first (deduped), then the rest of the generated catalog
+const PRODUCTOS_DEFAULT=(()=>{
+  const full=buildPVCCatalog();
+  const vendidosSet=new Set(PRODUCTOS_VENDIDOS);
+  const rest=full.filter(p=>!vendidosSet.has(p)&&p!=="Otro");
+  return [...PRODUCTOS_VENDIDOS,...rest,"Otro"];
+})();
 const productosDeOrdenes=(ordenes)=>{
-  const s=new Set();
-  (ordenes||[]).forEach(o=>(o.items||[]).forEach(it=>{if(it.producto)s.add(it.producto);}));
-  return s.size>0?[...s,"Otro"]:PRODUCTOS_DEFAULT;
+  // Always show the sold-products list first, then any extra products from prior orders, then "Otro".
+  const seen=new Set(PRODUCTOS_VENDIDOS);
+  const extras=[];
+  (ordenes||[]).forEach(o=>(o.items||[]).forEach(it=>{
+    if(it.producto&&!seen.has(it.producto)){seen.add(it.producto);extras.push(it.producto);}
+  }));
+  return [...PRODUCTOS_VENDIDOS,...extras,"Otro"];
 };
 
 // Haitian destinations: local cities, maritime ports, terrestrial border crossings.
@@ -195,45 +267,29 @@ function confirmDelete(sup,msg){
 // ── Accounting Access Control ─────────────────────────────────────────────────
 const CONTABILIDAD_CODES=["HUB","OWN","GUST2026"];
 const isContador=(sup)=>CONTABILIDAD_CODES.includes(sup.codigo);
+// Plastinord expense categories. Updated to the user's standard taxonomy (Electricity / Payroll /
+// Diesel / Customs / Repairs / Packaging / Freight) + Materia Prima for production cost tracking
+// + Otros for catchall. Order matters — this is the dropdown order.
 const CATEGORIAS_GASTO=[
-  {v:"materia_prima",l:"Materia Prima"},{v:"nomina",l:"Nómina"},{v:"energia",l:"Energía"},
-  {v:"mantenimiento",l:"Mantenimiento"},{v:"transporte",l:"Transporte"},{v:"otros",l:"Otros"}
+  {v:"materia_prima",l:"Materia Prima"},
+  {v:"electricidad",l:"Electricidad"},
+  {v:"nomina",l:"Nómina"},
+  {v:"diesel",l:"Diesel"},
+  {v:"aduanas",l:"Aduanas"},
+  {v:"reparaciones",l:"Reparaciones"},
+  {v:"empaque",l:"Empaque"},
+  {v:"flete",l:"Flete"},
+  {v:"otros",l:"Otros"}
 ];
-const METODOS_PAGO=[{v:"efectivo",l:"Efectivo"},{v:"transferencia",l:"Transferencia"},{v:"cheque",l:"Cheque"}];
-
-// Form defaults
-const F0={
-  etapa:"mezcla",
-  fecha:new Date().toISOString().split("T")[0],
-  maquina:"MEZ-1",
-  producto:"Tubo PVC 1\" SDR-26 x 6m",
-  tipoProducto:"Tubo PVC",
-  cliente:"",
-  empleado:"",
-  turno:"☀️ Turno Día",
-  pelicula:"",
-  pesoNucleo:"",
-  desperdicio:"",
-  rollosProducidos:"",
-  lbsImpresion:"",
-  desperdicioImpresion:"",
-  lbsSlitter:"",
-  desperdicioSlitter:"",
-  anchoRollo:"",
-  lbsCortadora:"",
-  bolsasProducidas:"",
-  desperdicioCorte:"",
-  desperdicioReciclado:"",
-  materialRecuperado:"",
-  notas:"",
-  ldpeMezcla:"",
-  mlldpeMezcla:"",
-  lote:"",
-  motivoParada:"",
-  piezasNecesarias:"",
-  piezasCambiadas:"",
-  duracionParada:""
+// Map legacy category values to current ones so old records still display correctly.
+const LEGACY_CAT_MAP={
+  energia:"electricidad",      // was "Energía"
+  mantenimiento:"reparaciones",// was "Mantenimiento"
+  transporte:"flete"           // was "Transporte"
 };
+const normalizeCategoria=(v)=>{if(!v)return"otros";return LEGACY_CAT_MAP[v]||v;};
+const labelCategoria=(v)=>{const k=normalizeCategoria(v);return(CATEGORIAS_GASTO.find(c=>c.v===k)||{l:v||"—"}).l;};
+const METODOS_PAGO=[{v:"efectivo",l:"Efectivo"},{v:"transferencia",l:"Transferencia"},{v:"cheque",l:"Cheque"}];
 
 const iS={background:"#F8FAFC",border:"1.5px solid "+B.border,borderRadius:10,padding:"13px 14px",color:B.textDark,fontSize:16,outline:"none",width:"100%",boxSizing:"border-box",WebkitAppearance:"none"};
 
@@ -246,12 +302,40 @@ const SUPA_URL="https://imxdnukaacwvojpnfoux.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlteGRudWthYWN3dm9qcG5mb3V4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0NzQ3NzIsImV4cCI6MjA5MzA1MDc3Mn0.ApmsMjF0IDz8xT23CUmx0heR_Pad6LjoF854u3Ni0GA";
 const SH={"Content-Type":"application/json","apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY};
 
+// Pack/unpack batch-extra fields into the notas column as JSON ({_n, _b, _f, _lr, _ad, _pf})
+function packNotas(r){
+  const extras={};
+  if(r.batchNumber)extras._b=r.batchNumber;
+  if(r.formula)extras._f=r.formula;
+  if(r.loteResinaUsado)extras._lr=r.loteResinaUsado;
+  if(Array.isArray(r.aditivos)&&r.aditivos.length)extras._ad=r.aditivos;
+  if(r.piesProducidos)extras._pf=Number(r.piesProducidos);
+  if(Object.keys(extras).length===0)return r.notas||null;
+  extras._n=r.notas||"";
+  return JSON.stringify(extras);
+}
+function unpackNotas(notasStr){
+  if(!notasStr)return{notas:""};
+  if(typeof notasStr!=="string"||!notasStr.startsWith("{"))return{notas:notasStr};
+  try{
+    const o=JSON.parse(notasStr);
+    if(typeof o!=="object"||o===null||!("_n" in o||"_b" in o||"_f" in o))return{notas:notasStr};
+    return{
+      notas:o._n||"",
+      batchNumber:o._b||"",
+      formula:o._f||"",
+      loteResinaUsado:o._lr||"",
+      aditivos:Array.isArray(o._ad)?o._ad:[],
+      piesProducidos:o._pf!=null?String(o._pf):""
+    };
+  }catch(e){return{notas:notasStr};}
+}
+
 async function dbSave(r){
   try{
     // Map generic lbs_out to the etapa-specific DB column when the form only set lbs_out
     const lbsOutNum=r.lbs_out?Number(r.lbs_out):null;
     const peliculaVal=r.pelicula?Number(r.pelicula):(r.etapa==="extrusion"?lbsOutNum:null);
-    const lbsImpVal=r.lbsImpresion?Number(r.lbsImpresion):(r.etapa==="impresion"?lbsOutNum:null);
     const lbsSlitterVal=r.lbsSlitter?Number(r.lbsSlitter):(r.etapa==="slitter"?lbsOutNum:null);
     await fetch(SUPA_URL+"/rest/v1/registros",{method:"POST",headers:Object.assign({},SH,{"Prefer":"return=minimal,resolution=merge-duplicates"}),body:JSON.stringify({
       id:String(r.id),etapa:r.etapa,fecha:r.fecha,maquina:r.maquina,
@@ -262,8 +346,6 @@ async function dbSave(r){
       pelicula:peliculaVal,
       desperdicio:r.desperdicio?Number(r.desperdicio):null,
       rollos_producidos:r.rollosProducidos?Number(r.rollosProducidos):null,
-      lbs_impresion:lbsImpVal,
-      desperdicio_impresion:r.desperdicioImpresion?Number(r.desperdicioImpresion):null,
       lbs_corte_rollo:lbsSlitterVal,
       desperdicio_corte_rollo:r.desperdicioSlitter?Number(r.desperdicioSlitter):null,
       ancho_rollo:r.anchoRollo?Number(r.anchoRollo):null,
@@ -276,7 +358,7 @@ async function dbSave(r){
       piezas_necesarias:r.piezasNecesarias||null,
       piezas_cambiadas:r.piezasCambiadas||null,
       duracion_parada:r.duracionParada?Number(r.duracionParada):null,
-      notas:r.notas||null
+      notas:packNotas(r)
     })});
   }catch(e){console.error("dbSave",e);}
 }
@@ -288,7 +370,7 @@ async function dbLoad(){
     return Array.isArray(rows)?rows.map(x=>{
       const etapa=x.etapa==="corte_rollo"?"slitter":x.etapa;
       // Reconstruct generic lbs_out from the etapa-specific column so cadena del día / stage totals work
-      const lbs_out=etapa==="extrusion"?x.pelicula:etapa==="impresion"?x.lbs_impresion:etapa==="slitter"?x.lbs_corte_rollo:undefined;
+      const lbs_out=etapa==="extrusion"?x.pelicula:etapa==="slitter"?x.lbs_corte_rollo:undefined;
       return{
       id:x.id,etapa,
       fecha:x.fecha,maquina:x.maquina,producto:x.producto,cliente:x.cliente,
@@ -297,14 +379,13 @@ async function dbLoad(){
       ldpe:x.ldpe,mlldpe:x.mlldpe,pelicula:x.pelicula,desperdicio:x.desperdicio,
       rollosProducidos:x.rollos_producidos,
       lbs_out,
-      lbsImpresion:x.lbs_impresion,desperdicioImpresion:x.desperdicio_impresion,
       lbsSlitter:x.lbs_corte_rollo,desperdicioSlitter:x.desperdicio_corte_rollo,
       anchoRollo:x.ancho_rollo,lbsCortadora:x.lbs_cortadora,
       bolsasProducidas:x.bolsas_producidas,desperdicioCorte:x.desperdicio_corte,
       desperdicioReciclado:x.desperdicio_reciclado,materialRecuperado:x.material_recuperado,
       motivoParada:x.motivo_parada,piezasNecesarias:x.piezas_necesarias,
       piezasCambiadas:x.piezas_cambiadas,duracionParada:x.duracion_parada,
-      notas:x.notas
+      ...unpackNotas(x.notas)
       };
     }):[];
   }catch(e){console.error("dbLoad",e);return[];}
@@ -320,7 +401,10 @@ async function dbSaveResina(b){
   try{
     await fetch(SUPA_URL+"/rest/v1/resina_batches",{method:"POST",headers:Object.assign({},SH,{"Prefer":"return=minimal,resolution=merge-duplicates"}),body:JSON.stringify({
       id:String(b.id),fecha:b.fecha,ldpe:Number(b.ldpe)||0,mlldpe:Number(b.mlldpe)||0,
+      reciclado:Number(b.reciclado)||0,
       total:Number(b.total)||0,lote:b.lote||null,
+      receta_id:b.recetaId?String(b.recetaId):null,
+      receta_nombre:b.recetaNombre||null,
       supervisor_nombre:b.supervisorNombre,empleado:b.empleado||null,
       turno:b.turno||null,notas:b.notas||null
     })});
@@ -331,13 +415,100 @@ async function dbLoadResina(){
   try{
     const r=await fetch(SUPA_URL+"/rest/v1/resina_batches?order=created_at.desc&limit=200",{headers:SH});
     const rows=await r.json();
-    return Array.isArray(rows)?rows:[];
+    return Array.isArray(rows)?rows.map(x=>({
+      id:x.id,fecha:x.fecha,
+      ldpe:x.ldpe,mlldpe:x.mlldpe,reciclado:x.reciclado||0,total:x.total,
+      lote:x.lote,
+      recetaId:x.receta_id,recetaNombre:x.receta_nombre,
+      supervisorNombre:x.supervisor_nombre,empleado:x.empleado,
+      turno:x.turno,notas:x.notas,created_at:x.created_at
+    })):[];
   }catch(e){return[];}
 }
 
 async function dbDeleteResina(id){
   try{await fetch(SUPA_URL+"/rest/v1/resina_batches?id=eq."+id,{method:"DELETE",headers:SH});}
   catch(e){}
+}
+
+// ── Recetas (Formulas / Recipes) ─────────────────────────────────────────────
+async function dbSaveReceta(rec){
+  try{
+    await fetch(SUPA_URL+"/rest/v1/recetas",{method:"POST",headers:Object.assign({},SH,{"Prefer":"return=minimal,resolution=merge-duplicates"}),body:JSON.stringify({
+      id:String(rec.id),
+      nombre:rec.nombre||null,
+      tipo:rec.tipo||null,
+      diametro:rec.diametro||null,
+      descripcion:rec.descripcion||null,
+      activa:rec.activa!==false,
+      materiales:JSON.stringify(rec.materiales||[])
+    })});
+  }catch(e){console.error("dbSaveReceta",e);}
+}
+async function dbLoadRecetas(){
+  try{
+    const r=await fetch(SUPA_URL+"/rest/v1/recetas?order=created_at.desc&limit=200",{headers:SH});
+    const rows=await r.json();
+    return Array.isArray(rows)?rows.map(x=>({
+      id:x.id,nombre:x.nombre,tipo:x.tipo,diametro:x.diametro,
+      descripcion:x.descripcion,activa:x.activa!==false,
+      materiales:(()=>{try{return typeof x.materiales==="string"?JSON.parse(x.materiales||"[]"):(x.materiales||[]);}catch(e){return[];}})()
+    })):[];
+  }catch(e){console.error("dbLoadRecetas",e);return[];}
+}
+async function dbDeleteReceta(id){
+  try{await fetch(SUPA_URL+"/rest/v1/recetas?id=eq."+id,{method:"DELETE",headers:SH});}
+  catch(e){}
+}
+const qSaveReceta=r=>queueOrExec(dbSaveReceta,[r]);
+
+// ── Tipos de Cambio (Exchange Rates) ─────────────────────────────────────────
+async function dbSaveTipoCambio(tc){
+  try{
+    await fetch(SUPA_URL+"/rest/v1/tipos_cambio",{method:"POST",headers:Object.assign({},SH,{"Prefer":"return=minimal,resolution=merge-duplicates"}),body:JSON.stringify({
+      id:String(tc.id),fecha:tc.fecha,
+      htg_por_usd:Number(tc.htgPorUsd)||0,
+      fuente:tc.fuente||"manual",notas:tc.notas||null,
+      creado_por:tc.creadoPor||null
+    })});
+  }catch(e){console.error("dbSaveTipoCambio",e);}
+}
+async function dbLoadTiposCambio(){
+  try{
+    const r=await fetch(SUPA_URL+"/rest/v1/tipos_cambio?order=fecha.desc&limit=500",{headers:SH});
+    const rows=await r.json();
+    return Array.isArray(rows)?rows.map(x=>({id:x.id,fecha:x.fecha,htgPorUsd:Number(x.htg_por_usd)||0,fuente:x.fuente,notas:x.notas,creadoPor:x.creado_por,created_at:x.created_at})):[];
+  }catch(e){console.error("dbLoadTiposCambio",e);return[];}
+}
+async function dbDeleteTipoCambio(id){
+  try{await fetch(SUPA_URL+"/rest/v1/tipos_cambio?id=eq."+id,{method:"DELETE",headers:SH});}
+  catch(e){}
+}
+const qSaveTipoCambio=tc=>queueOrExec(dbSaveTipoCambio,[tc]);
+
+// Find the closest applicable rate for a date. Falls back to latest if date is missing.
+function findTipoCambio(tiposCambio,fecha){
+  if(!Array.isArray(tiposCambio)||tiposCambio.length===0)return null;
+  const sorted=tiposCambio.slice().sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+  if(!fecha)return sorted[0];
+  const target=new Date(fecha);
+  // Prefer the latest rate on or before the target date (matches accounting practice).
+  const onOrBefore=sorted.find(t=>new Date(t.fecha)<=target);
+  return onOrBefore||sorted[sorted.length-1];
+}
+// Convert a monto from one currency to another using historical rates.
+// Returns the converted number; returns the input if no rate is available or currencies match.
+function convertirMoneda(monto,desde,hacia,fecha,tiposCambio){
+  const m=Number(monto)||0;
+  if(!m)return 0;
+  const norm=(c)=>(c==="USD"||c==="US$"||c==="$"?"USD":(c||"HTG"));
+  const from=norm(desde),to=norm(hacia);
+  if(from===to)return m;
+  const tc=findTipoCambio(tiposCambio,fecha);
+  if(!tc||!tc.htgPorUsd)return m; // no rate available, leave as-is
+  if(from==="USD"&&to==="HTG")return m*tc.htgPorUsd;
+  if(from==="HTG"&&to==="USD")return m/tc.htgPorUsd;
+  return m;
 }
 
 async function dbSaveOrder(o){
@@ -646,17 +817,36 @@ async function dbDeleteProveedor(id){
 }
 
 // ── Audit Log ────────────────────────────────────────────────────────────────
-async function dbLogAudit(action,table,recordId,supervisor){
+// Audit log: every save creates a row. Two call patterns are supported for backward compat:
+//   dbLogAudit("delete","facturas",id,sup.nombre)              ← legacy 4-arg (action/table/id/sup)
+//   dbLogAudit({action,event,table,recordId,supervisor,meta})  ← rich form
+async function dbLogAudit(actionOrOpts,table,recordId,supervisor){
+  const opts=typeof actionOrOpts==="object"&&actionOrOpts!==null
+    ?actionOrOpts
+    :{action:actionOrOpts,table:table,recordId:recordId,supervisor:supervisor};
   try{
     await fetch(SUPA_URL+"/rest/v1/audit_log",{method:"POST",headers:Object.assign({},SH,{"Prefer":"return=minimal"}),body:JSON.stringify({
       id:String(Date.now())+Math.random().toString(36).slice(2,6),
-      action:action,
-      table_name:table,
-      record_id:String(recordId),
-      supervisor:supervisor,
+      action:opts.action||(opts.event?opts.event.split(".").pop():"unknown"),
+      event_type:opts.event||null,
+      table_name:opts.table||null,
+      record_id:opts.recordId!=null?String(opts.recordId):null,
+      supervisor:opts.supervisor||(window.__plastinord_currentSup?window.__plastinord_currentSup.nombre:null),
+      meta:opts.meta?JSON.stringify(opts.meta):null,
       created_at:new Date().toISOString()
     })});
   }catch(e){console.error("audit",e);}
+}
+// Domain event helper. Sup is optional — falls back to the globally-tracked current login.
+function logEvent(eventType,table,recordId,meta,sup){
+  return dbLogAudit({event:eventType,action:eventType.split(".").pop(),table,recordId,supervisor:(sup&&sup.nombre)||(window.__plastinord_currentSup&&window.__plastinord_currentSup.nombre),meta});
+}
+async function dbLoadAudit(limit){
+  try{
+    const r=await fetch(SUPA_URL+"/rest/v1/audit_log?order=created_at.desc&limit="+(limit||500),{headers:SH});
+    const rows=await r.json();
+    return Array.isArray(rows)?rows.map(x=>({id:x.id,action:x.action,event:x.event_type,table:x.table_name,recordId:x.record_id,supervisor:x.supervisor,meta:(()=>{try{return x.meta?JSON.parse(x.meta):null;}catch(e){return null;}})(),created_at:x.created_at})):[];
+  }catch(e){return[];}
 }
 
 // ── Production Flow Helpers ──────────────────────────────────────────────────
@@ -807,11 +997,13 @@ function LogRow({log,onDel,sup}){
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}>
             <Badge label={ETIQUETAS[log.etapa]||log.etapa} color={c}/>
+            {log.batchNumber&&<Badge label={log.batchNumber} color={B.navy}/>}
             <span style={{color:B.textLight,fontSize:12}}>{log.maquina}</span>
             {log.turno&&<TurnoBadge turno={log.turno}/>}
           </div>
           <div style={{color:B.textMid,fontSize:13,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
             {log.empleado?log.empleado+" · ":""}{log.etapa==="maquina"?(log.motivoParada||"Reporte"):log.producto||log.cliente||"—"} · {log.fecha}
+            {log.piesProducidos?" · "+Number(log.piesProducidos).toLocaleString()+" ft":""}
           </div>
         </div>
         <span style={{color:B.textLight,fontSize:14,flexShrink:0}}>{exp?"▲":"▼"}</span>
@@ -821,10 +1013,14 @@ function LogRow({log,onDel,sup}){
           {log.empleado&&<Pair k="Operador" v={log.empleado}/>}
           {log.supervisorNombre&&<Pair k="Supervisor" v={log.supervisorNombre.split(" ")[0]}/>}
           {log.turno&&<Pair k="Turno" v={log.turno}/>}
+          {log.batchNumber&&<Pair k="Batch" v={log.batchNumber} color={B.navy}/>}
+          {log.formula&&<Pair k="Fórmula" v={log.formula}/>}
+          {log.loteResinaUsado&&<Pair k="Lote resina" v={log.loteResinaUsado}/>}
+          {log.piesProducidos&&<Pair k="Pies" v={Number(log.piesProducidos).toLocaleString()+" ft"} color={B.teal}/>}
           {log.pelicula&&<Pair k="Película" v={log.pelicula+" lbs"} color={B.green}/>}
           {log.desperdicio&&<Pair k="Desperdicio" v={log.desperdicio+" lbs"} color={B.red}/>}
-          {log.rollosProducidos&&<Pair k="Rollos" v={log.rollosProducidos}/>}
-          {log.lbsImpresion&&<Pair k="Entrada imp." v={log.lbsImpresion+" lbs"}/>}
+          {log.rollosProducidos&&<Pair k="Tubos" v={log.rollosProducidos}/>}
+          {Array.isArray(log.aditivos)&&log.aditivos.length>0&&<Pair k="Aditivos" v={log.aditivos.join(", ")}/>}
           {log.lbsSlitter&&<Pair k="Entrada slitter" v={log.lbsSlitter+" lbs"}/>}
           {log.anchoRollo&&<Pair k="Ancho" v={log.anchoRollo+" mm"}/>}
           {log.bolsasProducidas&&<Pair k="Fundas" v={Number(log.bolsasProducidas).toLocaleString()} color={B.teal}/>}
@@ -995,7 +1191,7 @@ function Login({onLogin,onBack}){
         <div style={{display:"inline-block",background:"rgba(255,255,255,.15)",borderRadius:16,padding:"12px 16px",backdropFilter:"blur(8px)"}}>
           <img src={LOGO_IMG} alt="Plastinord Hub" style={{width:48,height:48,objectFit:"contain"}}/>
         </div>
-        <div style={{color:"rgba(255,255,255,.5)",fontSize:11,fontWeight:600,marginTop:8,letterSpacing:1}}>v2.7</div>
+        <div style={{color:"rgba(255,255,255,.5)",fontSize:11,fontWeight:600,marginTop:8,letterSpacing:1}}>v3.0</div>
       </div>
       <div style={{background:"rgba(255,255,255,.93)",borderRadius:20,padding:24,boxShadow:"0 20px 60px rgba(0,0,0,.4)",backdropFilter:"blur(12px)"}}>
         <div style={{color:B.textLight,fontSize:12,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",marginBottom:8}}>Código</div>
@@ -1206,296 +1402,277 @@ function Inventario({mat,setMat,movs,setMovs,sup}){
   </div>);
 }
 
-// ── Registro (now includes Mezcla as first stage + auto-stock) ───────────────
-function Registro({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,movs,setMovs,productoLogs,setProductoLogs,ordenes,setOrdenes}){
-  const [form,setForm]=useState(F0);
-  const [saved,setSaved]=useState(false);
-  const [filt,setFilt]=useState("all");
+// ── Production Cost Calculator helpers ──────────────────────────────────────
+// Per-pound overhead allocation for electricity, labor and packaging.
+// Stored in localStorage so the admin can tune them as cost factors change.
+const COSTOS_GENERALES_KEY="plastinord_costos_generales";
+const COSTOS_GENERALES_DEFAULT={electricidad_per_lb:0,labor_per_lb:0,empaque_per_lb:0,moneda:"HTG"};
+const loadCostosGenerales=()=>{
+  try{const raw=localStorage.getItem(COSTOS_GENERALES_KEY);if(!raw)return Object.assign({},COSTOS_GENERALES_DEFAULT);return Object.assign({},COSTOS_GENERALES_DEFAULT,JSON.parse(raw));}
+  catch(e){return Object.assign({},COSTOS_GENERALES_DEFAULT);}
+};
+const saveCostosGenerales=(cg)=>{try{localStorage.setItem(COSTOS_GENERALES_KEY,JSON.stringify(cg));}catch(e){}};
+// Compute the full cost breakdown for a recipe given the current overhead config.
+// Returns { totalLbs, materialesCost, electricidad, labor, empaque, total, perLb, lines:[{nombre,cantidad,costo,subtotal}], moneda }
+function computeRecipeCost(receta,cg){
+  const cfg=cg||COSTOS_GENERALES_DEFAULT;
+  const lines=(receta.materiales||[]).map(m=>{
+    const cant=Number(m.cantidad)||0;
+    const costo=Number(m.costo_unitario)||0;
+    return{nombre:m.material_nombre||m.material_id,cantidad:cant,costo,subtotal:cant*costo};
+  });
+  const totalLbs=lines.reduce((s,l)=>s+l.cantidad,0);
+  const materialesCost=lines.reduce((s,l)=>s+l.subtotal,0);
+  const electricidad=totalLbs*(Number(cfg.electricidad_per_lb)||0);
+  const labor=totalLbs*(Number(cfg.labor_per_lb)||0);
+  const empaque=totalLbs*(Number(cfg.empaque_per_lb)||0);
+  const total=materialesCost+electricidad+labor+empaque;
+  const perLb=totalLbs>0?total/totalLbs:0;
+  return{totalLbs,materialesCost,electricidad,labor,empaque,total,perLb,lines,moneda:cfg.moneda||"HTG"};
+}
+const fmtMoney=(n,moneda)=>(moneda==="US$"||moneda==="USD"?"US$ ":"HTG ")+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+
+// ── Recetas (Formulas / Recipe Engine) ───────────────────────────────────────
+function Recetas({recetas,setRecetas,mat,sup}){
+  const [modo,setModo]=useState(false);
+  const [editId,setEditId]=useState(null);
+  const [form,setForm]=useState({nombre:"",tipo:"Presión",diametro:"1\"",descripcion:"",activa:true,materiales:[]});
+  const [matSel,setMatSel]=useState((mat[0]||{}).id||"");
+  const [matCant,setMatCant]=useState("");
+  const [matCosto,setMatCosto]=useState("");
   const [buscar,setBuscar]=useState("");
-  const set=k=>v=>setForm(f=>{const n=Object.assign({},f,{[k]:v});if(k==="etapa")n.maquina=(MAQUINAS[v]||[""])[0];return n;});
+  const [showInactive,setShowInactive]=useState(false);
+  const [expandedCost,setExpandedCost]=useState(null);
+  const [showCostosCfg,setShowCostosCfg]=useState(false);
+  const [costosGenerales,setCostosGeneralesState]=useState(loadCostosGenerales);
+  const setCG=(patch)=>setCostosGeneralesState(prev=>{const next=Object.assign({},prev,patch);saveCostosGenerales(next);return next;});
 
-  const pelNeta=()=>{
-    if(form.etapa!=="extrusion")return null;
-    const p=Number(form.pelicula),n=Number(form.pesoNucleo||PESO_NUCLEO_DEFAULT),r=Number(form.rollosProducidos||0);
-    if(!p)return null;
-    return Math.max(0,r>0?p-(r*n):p).toFixed(2);
+  const reset=()=>{setForm({nombre:"",tipo:"Presión",diametro:"1\"",descripcion:"",activa:true,materiales:[]});setEditId(null);setMatSel((mat[0]||{}).id||"");setMatCant("");setMatCosto("");};
+  const startEdit=(r)=>{setForm({nombre:r.nombre||"",tipo:r.tipo||"Otro",diametro:r.diametro||"",descripcion:r.descripcion||"",activa:r.activa!==false,materiales:r.materiales||[]});setEditId(r.id);setModo(true);};
+  const set=k=>v=>setForm(f=>Object.assign({},f,{[k]:v}));
+
+  const addMaterial=()=>{
+    if(!matSel||!matCant||Number(matCant)<=0)return;
+    const m=mat.find(x=>x.id===matSel);
+    if(!m)return;
+    if(form.materiales.some(x=>x.material_id===matSel))return;
+    const item={material_id:m.id,material_nombre:m.nombre,cantidad:Number(matCant),unidad:m.unidad||"lbs"};
+    if(matCosto&&Number(matCosto)>0)item.costo_unitario=Number(matCosto);
+    setForm(f=>Object.assign({},f,{materiales:[...f.materiales,item]}));
+    setMatCant("");setMatCosto("");
   };
-
-  // Mezcla helpers
-  const ldpeStock=(mat.find(m=>m.id==="ldpe")||{stockActual:0}).stockActual;
-  const mlldpeStock=(mat.find(m=>m.id==="mlldpe")||{stockActual:0}).stockActual;
-  const mezTotal=()=>{const l=Number(form.ldpeMezcla||0),m=Number(form.mlldpeMezcla||0);return l+m;};
-  const mezPct=()=>{const t=mezTotal();if(!t)return null;return((Number(form.ldpeMezcla||0)/t)*100).toFixed(1);};
+  const removeMaterial=(id)=>setForm(f=>Object.assign({},f,{materiales:f.materiales.filter(x=>x.material_id!==id)}));
 
   const save=()=>{
-    // Mezcla save logic
-    if(form.etapa==="mezcla"){
-      if(!form.ldpeMezcla&&!form.mlldpeMezcla)return;
-      const b={id:Date.now(),fecha:form.fecha,ldpe:Number(form.ldpeMezcla)||0,mlldpe:Number(form.mlldpeMezcla)||0,total:mezTotal(),lote:form.lote,empleado:form.empleado,turno:form.turno,notas:form.notas,supervisorNombre:sup.nombre};
-      [["ldpe",b.ldpe],["mlldpe",b.mlldpe]].forEach(([id,val])=>{
-        if(!val)return;
-        const m=mat.find(x=>x.id===id);
-        if(!m)return;
-        setMat(p=>p.map(x=>x.id===id?Object.assign({},x,{stockActual:Math.max(0,x.stockActual-val)}):x));
-        const dmv={id:Date.now()+Math.random(),tipo:"descuento",materialId:id,materialNombre:m.nombre,cantidad:val,unidad:m.unidad,maquina:"Mezcla",fecha:b.fecha,supervisor:sup.nombre,notas:"Lote: "+(b.lote||"—")};setMovs(p=>[dmv,...p]);qSaveMovimiento(dmv);
-      });
-      setResinaLogs(p=>[b,...p]);
-      qSaveResina(b);
-      setSaved(true);setTimeout(()=>setSaved(false),2000);
-      setForm(Object.assign({},F0,{etapa:"mezcla",maquina:"MEZ-1",empleado:form.empleado,turno:form.turno}));
-      return;
-    }
-
-    // Regular production save
-    const r=Object.assign({},form,{id:Date.now(),supervisorNombre:sup.nombre,supervisorCodigo:sup.codigo});
-    setRegs(p=>[r,...p]);
-    qSave(r);
-
-    // Auto-stock: only slitter → rolls and cortadora → bags go to producto terminado
-    if(form.etapa==="cortadora"&&Number(form.bolsasProducidas)>0){
-      const entry={id:Date.now()+1,fecha:form.fecha,producto:form.producto||"Producto",cantidad:Number(form.bolsasProducidas),unidad:"uds",tipo:"entrada",destino:"",ordenId:"",notas:"Auto: Cortadora "+form.maquina,supervisor:sup.nombre,registroRef:r.id};
-      setProductoLogs(p=>[entry,...p]);
-      qSaveProducto(entry);
-    }
-    if(form.etapa==="slitter"&&Number(form.rollosProducidos)>0){
-      const entry={id:Date.now()+2,fecha:form.fecha,producto:form.producto||"Rollo Transparente",cantidad:Number(form.rollosProducidos),unidad:"rollos",tipo:"entrada",destino:"",ordenId:"",notas:"Auto: Slitter "+form.maquina,supervisor:sup.nombre,registroRef:r.id};
-      setProductoLogs(p=>[entry,...p]);
-      qSaveProducto(entry);
-    }
-    // Peletizadora: output goes to materia prima as material peletizado
-    if(form.etapa==="peletizadora"&&Number(form.peletSalida)>0){
-      const lbs=Number(form.peletSalida);
-      setMat(p=>p.map(x=>x.id==="peletizado"?Object.assign({},x,{stockActual:x.stockActual+lbs}):x));
-      const mv={id:Date.now()+3,tipo:"entrada",materialId:"peletizado",materialNombre:"Material Peletizado",cantidad:lbs,unidad:"lbs",maquina:form.maquina,fecha:form.fecha,supervisor:sup.nombre,notas:"Auto: Peletizadora — "+lbs+" lbs producidas"};
-      setMovs(p=>[mv,...p]);qSaveMovimiento(mv);
-    }
-
-    // Auto-advance orders based on production stage completion
-    if(["impresion","slitter"].includes(form.etapa)&&form.producto){
-      const allRegs=[...regs,r]; // include the just-saved registro
-      const stageMap={impresion:"impresion",slitter:"listo"}; // impresion done → advance to slitter; slitter done → advance to listo
-      const nextStage=stageMap[form.etapa];
-      const targetEtapa=form.etapa==="impresion"?"impresion":"slitter"; // order must be at this stage or earlier
-      (ordenes||[]).forEach(o=>{
-        // Only advance orders that are at the stage before the target
-        const oIdx=ETAPAS_ORDEN.indexOf(o.etapa);
-        const targetIdx=ETAPAS_ORDEN.indexOf(form.etapa);
-        if(oIdx>targetIdx)return; // already past this stage
-        // Check if all order items have at least one registro at this stage
-        const items=(o.items||[]).filter(it=>it.producto);
-        if(items.length===0)return;
-        const allDone=items.every(it=>allRegs.some(reg=>reg.etapa===form.etapa&&reg.producto===it.producto));
-        if(allDone){
-          const next=form.etapa==="empaque"?"listo":ETAPAS_ORDEN[ETAPAS_ORDEN.indexOf(form.etapa)+1];
-          setOrdenes(p=>p.map(x=>x.id===o.id?Object.assign({},x,{etapa:next}):x));
-          dbUpdateOrder(o.id,{etapa:next});
-        }
-      });
-    }
-
-    setSaved(true);
-    setTimeout(()=>setSaved(false),2000);
-    setForm(Object.assign({},F0,{etapa:form.etapa,maquina:(MAQUINAS[form.etapa]||[""])[0],empleado:form.empleado,turno:form.turno}));
+    if(!form.nombre.trim())return;
+    if(form.materiales.length===0)return;
+    const rec=Object.assign({},form,{id:editId||Date.now(),nombre:form.nombre.trim()});
+    setRecetas(p=>{const others=p.filter(x=>String(x.id)!==String(rec.id));return [rec,...others];});
+    qSaveReceta(rec);
+    logEvent(editId?"receta.updated":"receta.created","recetas",rec.id,{nombre:rec.nombre,tipo:rec.tipo,diametro:rec.diametro,materiales:(rec.materiales||[]).length,activa:rec.activa!==false},sup);
+    setModo(false);reset();
   };
 
-  // Filter: mezcla shows resinaLogs, others show regs
-  const matchBuscarReg=r=>{if(!buscar)return true;const q=buscar.toLowerCase();return(r.producto||"").toLowerCase().includes(q)||(r.maquina||"").toLowerCase().includes(q)||(r.empleado||"").toLowerCase().includes(q)||(r.supervisorNombre||"").toLowerCase().includes(q)||(r.etapa||"").toLowerCase().includes(q);};
-  const filRegs=(filt==="mezcla"?[]:filt==="all"?regs:regs.filter(r=>r.etapa===filt)).filter(matchBuscarReg);
-  const filMezcla=(filt==="mezcla"?resinaLogs:filt==="all"?resinaLogs:[]).filter(b=>{if(!buscar)return true;const q=buscar.toLowerCase();return(b.lote||"").toLowerCase().includes(q)||(b.empleado||"").toLowerCase().includes(q)||(b.supervisorNombre||"").toLowerCase().includes(q);});
-  const pn=pelNeta();
+  const del=(r)=>{
+    if(!confirmDelete(sup,"¿Eliminar la receta '"+r.nombre+"'?"))return;
+    setRecetas(p=>p.filter(x=>String(x.id)!==String(r.id)));
+    dbDeleteReceta(r.id);
+    logEvent("receta.deleted","recetas",r.id,{nombre:r.nombre,tipo:r.tipo},sup);
+  };
 
-  return(<div style={{display:"flex",flexDirection:"column",gap:16}}>
-    <Card ch={<div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-        <div>
-          <h2 style={{color:B.textDark,fontSize:18,fontWeight:800,margin:"0 0 2px"}}>Nuevo Registro</h2>
-          <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:22,height:22,borderRadius:"50%",background:"linear-gradient(135deg,"+B.teal+","+B.navy+")",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:11,fontWeight:800}}>{sup.nombre.charAt(0)}</div><span style={{color:B.teal,fontSize:12,fontWeight:700}}>{sup.codigo}</span></div>
-        </div>
-        {saved&&<span style={{background:B.green+"18",color:B.green,borderRadius:20,padding:"6px 14px",fontSize:13,fontWeight:700}}>✓ Guardado</span>}
+  const toggleActive=(r)=>{
+    const upd=Object.assign({},r,{activa:!r.activa});
+    setRecetas(p=>p.map(x=>String(x.id)===String(r.id)?upd:x));
+    qSaveReceta(upd);
+    logEvent(upd.activa?"receta.activated":"receta.deactivated","recetas",r.id,{nombre:r.nombre},sup);
+  };
+
+  const filtered=recetas.filter(r=>{
+    if(!showInactive&&r.activa===false)return false;
+    if(!buscar)return true;
+    const q=buscar.toLowerCase();
+    return(r.nombre||"").toLowerCase().includes(q)||(r.tipo||"").toLowerCase().includes(q)||(r.diametro||"").toLowerCase().includes(q);
+  });
+
+  const totalLbs=(form.materiales||[]).reduce((s,x)=>s+(Number(x.cantidad)||0),0);
+  const totalCost=(form.materiales||[]).reduce((s,x)=>s+((Number(x.cantidad)||0)*(Number(x.costo_unitario)||0)),0);
+
+  return(<div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div>
+        <h2 style={{color:B.textDark,fontSize:18,fontWeight:800,margin:"0 0 2px"}}>📋 Recetas</h2>
+        <p style={{color:B.textLight,fontSize:13,margin:0}}>Fórmulas de producción ({recetas.length})</p>
       </div>
-
-      {/* Stage selector */}
-      <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4,marginBottom:16,scrollbarWidth:"none"}}>
-        {ETAPAS.map(e=>(<button key={e} onClick={()=>set("etapa")(e)} style={{background:form.etapa===e?CE[e]:"transparent",border:"2px solid "+(form.etapa===e?CE[e]:B.border),borderRadius:20,padding:"9px 14px",color:form.etapa===e?"#fff":B.textMid,fontSize:13,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>{ICONOS[e]} {ETIQUETAS[e]}</button>))}
+      <div style={{display:"flex",gap:6}}>
+        <Btn ch={showCostosCfg?"✕":"⚙️ Costos"} fn={()=>setShowCostosCfg(!showCostosCfg)} small outline color={B.navy}/>
+        <Btn ch={modo?"✕ Cancelar":"+ Nueva"} fn={()=>{if(modo){setModo(false);reset();}else{reset();setModo(true);}}} small color={modo?B.red:undefined}/>
       </div>
-
-      {pn&&<div style={{background:B.green+"12",border:"1px solid "+B.green+"33",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:B.green,fontWeight:600}}>⚖️ Película neta (sin núcleo): {pn} lbs</div>}
-
-      <div style={{display:"flex",flexDirection:"column",gap:14}}>
-        {/* Common: date + machine */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-          <F label="Fecha" value={form.fecha} onChange={set("fecha")} type="date"/>
-          {form.etapa!=="mezcla"&&<S label="Máquina" value={form.maquina} onChange={set("maquina")} options={(MAQUINAS[form.etapa]||[]).map(m=>({v:m,l:m}))}/>}
-          {form.etapa==="mezcla"&&<F label="# Lote (opcional)" value={form.lote} onChange={set("lote")} placeholder="Ej: L-2025-01"/>}
-        </div>
-
-        {/* Employee + Turno */}
-        <div style={{background:"#F8FAFC",borderRadius:12,padding:"12px 14px",border:"1.5px solid "+B.border}}>
-          <div style={{fontSize:11,fontWeight:700,color:B.textLight,letterSpacing:.8,textTransform:"uppercase",marginBottom:10}}>{form.etapa==="mezcla"?"Operador de Mezcla":"Operador en "+form.maquina}</div>
-          <S label="Operador" value={form.empleado} onChange={set("empleado")} options={[{v:"",l:"— Seleccionar —"},...NOMBRES_EMPLEADOS.map(n=>({v:n,l:n}))]}/>
-          <div style={{marginTop:10}}>
-            <div style={{fontSize:12,fontWeight:600,color:B.textMid,marginBottom:7}}>Turno</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              {TURNOS.map(t=>{const isSelected=form.turno===t;const isNoche=t.includes("Noche");return(<button key={t} onClick={()=>set("turno")(t)} style={{background:isSelected?(isNoche?"#1C2540":"#FFFBEB"):B.card,border:"2px solid "+(isSelected?(isNoche?"#5BADA8":B.amber):B.border),borderRadius:10,padding:"11px 8px",cursor:"pointer",textAlign:"center"}}>
-                <div style={{fontSize:20,marginBottom:3}}>{isNoche?"🌙":"☀️"}</div>
-                <div style={{fontSize:12,fontWeight:800,color:isSelected?(isNoche?"#7EC8C4":B.amber):B.textMid}}>{isNoche?"Noche":"Día"}</div>
-              </button>);})}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Mezcla fields ── */}
-        {form.etapa==="mezcla"&&<div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-            <div style={{background:"#fff",borderRadius:12,padding:"12px 14px",border:"1.5px solid "+B.border}}>
-              <div style={{color:B.textLight,fontSize:11,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",marginBottom:4}}>Stock LDPE</div>
-              <div style={{color:B.teal,fontSize:20,fontWeight:800}}>{ldpeStock.toLocaleString()}<span style={{fontSize:12,marginLeft:3}}>lbs</span></div>
-            </div>
-            <div style={{background:"#fff",borderRadius:12,padding:"12px 14px",border:"1.5px solid "+B.border}}>
-              <div style={{color:B.textLight,fontSize:11,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",marginBottom:4}}>Stock MLLDPE</div>
-              <div style={{color:B.navy,fontSize:20,fontWeight:800}}>{mlldpeStock.toLocaleString()}<span style={{fontSize:12,marginLeft:3}}>lbs</span></div>
-            </div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <F label="LDPE (lbs)" value={form.ldpeMezcla} onChange={set("ldpeMezcla")} type="number" placeholder="0"/>
-            <F label="MLLDPE (lbs)" value={form.mlldpeMezcla} onChange={set("mlldpeMezcla")} type="number" placeholder="0"/>
-          </div>
-          {mezTotal()>0&&<div style={{background:"linear-gradient(135deg,"+B.purple+"12,"+B.teal+"12)",border:"1px solid "+B.purple+"33",borderRadius:12,padding:"14px",marginTop:12}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{color:B.textMid,fontSize:13,fontWeight:600}}>Total mezcla</span>
-              <span style={{color:B.textDark,fontWeight:800,fontSize:16}}>{mezTotal().toLocaleString()} lbs</span>
-            </div>
-            {mezPct()&&<div>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4,fontSize:12}}>
-                <span style={{color:B.teal,fontWeight:700}}>LDPE {mezPct()}%</span>
-                <span style={{color:B.navy,fontWeight:700}}>MLLDPE {(100-Number(mezPct())).toFixed(1)}%</span>
-              </div>
-              <div style={{height:8,background:B.border,borderRadius:4,overflow:"hidden"}}>
-                <div style={{width:mezPct()+"%",height:"100%",background:"linear-gradient(90deg,"+B.teal+","+B.tealLight+")",borderRadius:4}}/>
-              </div>
-            </div>}
-            <div style={{color:B.amber,fontSize:12,fontWeight:600,marginTop:8}}>⚡ Se descontará del inventario al confirmar</div>
-          </div>}
-          <div style={{marginTop:10,background:B.bg,borderRadius:8,padding:"9px 12px",fontSize:12,color:B.textLight}}>💡 Una mezcla puede abarcar 3-5 turnos. Registre cada lote con su turno correspondiente.</div>
-        </div>}
-
-        {/* Extrusion fields */}
-        {form.etapa==="extrusion"&&<div>
-          <div style={{marginBottom:12}}><S label="Tipo de Producto" value={form.tipoProducto} onChange={set("tipoProducto")} options={[{v:"Tubo PVC",l:"Tubo PVC"},{v:"Conexión",l:"Conexión / Accesorio"},{v:"Otro",l:"Otro"}]}/></div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <F label="Película Total (lbs)" value={form.pelicula} onChange={set("pelicula")} type="number" placeholder="0"/>
-            <F label="Rollos Producidos" value={form.rollosProducidos} onChange={set("rollosProducidos")} type="number" placeholder="0"/>
-          </div>
-          <div style={{marginTop:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <F label={"Peso Núcleo/Rollo (lbs)"} value={form.pesoNucleo} onChange={set("pesoNucleo")} type="number" placeholder={String(PESO_NUCLEO_DEFAULT)}/>
-            <F label="Desperdicios (lbs)" value={form.desperdicio} onChange={set("desperdicio")} type="number" placeholder="0"/>
-          </div>
-        </div>}
-
-        {form.etapa==="impresion"&&<div>
-          <F label="Producto" value={form.producto} onChange={set("producto")} placeholder="Ej: Tubo PVC 2″ SDR-26 x 6m"/>
-          <div style={{marginTop:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <F label="Entrada (lbs)" value={form.lbsImpresion} onChange={set("lbsImpresion")} type="number" placeholder="0"/>
-            <F label="Rollos Impresos" value={form.rollosProducidos} onChange={set("rollosProducidos")} type="number" placeholder="0"/>
-          </div>
-          <div style={{marginTop:12}}><F label="Desperdicios (lbs)" value={form.desperdicioImpresion} onChange={set("desperdicioImpresion")} type="number" placeholder="0"/></div>
-        </div>}
-
-        {form.etapa==="slitter"&&<div>
-          <F label="Producto" value={form.producto} onChange={set("producto")} placeholder="Ej: Tubo PVC 2″ SDR-26 x 6m"/>
-          <div style={{marginTop:12}}><F label="Cliente (opcional)" value={form.cliente} onChange={set("cliente")} placeholder="Nombre"/></div>
-          <div style={{marginTop:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <F label="Entrada (lbs)" value={form.lbsSlitter} onChange={set("lbsSlitter")} type="number" placeholder="0"/>
-            <F label="Rollos Producidos" value={form.rollosProducidos} onChange={set("rollosProducidos")} type="number" placeholder="0"/>
-          </div>
-          <div style={{marginTop:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <F label="Ancho (mm)" value={form.anchoRollo} onChange={set("anchoRollo")} type="number" placeholder="0"/>
-            <F label="Desperdicios (lbs)" value={form.desperdicioSlitter} onChange={set("desperdicioSlitter")} type="number" placeholder="0"/>
-          </div>
-          <div style={{marginTop:10,background:B.green+"12",borderRadius:8,padding:"9px 12px",fontSize:12,color:B.green,fontWeight:600}}>📦 Los rollos producidos se agregarán automáticamente al almacén</div>
-        </div>}
-
-        {form.etapa==="cortadora"&&<div>
-          <F label="Producto" value={form.producto} onChange={set("producto")} placeholder="Ej: Tubo PVC 2″ SDR-26 x 6m"/>
-          <div style={{marginTop:12}}><F label="Cliente (opcional)" value={form.cliente} onChange={set("cliente")} placeholder="Nombre"/></div>
-          <div style={{marginTop:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <F label="Entrada (lbs)" value={form.lbsCortadora} onChange={set("lbsCortadora")} type="number" placeholder="0"/>
-            <F label="Fundas Producidas" value={form.bolsasProducidas} onChange={set("bolsasProducidas")} type="number" placeholder="0"/>
-          </div>
-          <div style={{marginTop:12}}><F label="Desperdicios (lbs)" value={form.desperdicioCorte} onChange={set("desperdicioCorte")} type="number" placeholder="0"/></div>
-          <div style={{marginTop:10,background:B.green+"12",borderRadius:8,padding:"9px 12px",fontSize:12,color:B.green,fontWeight:600}}>📦 Las fundas producidas se agregarán automáticamente al almacén</div>
-        </div>}
-
-        {form.etapa==="reciclaje"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-          <F label="Entrada (lbs)" value={form.desperdicioReciclado} onChange={set("desperdicioReciclado")} type="number" placeholder="0"/>
-          <F label="Recuperado (lbs)" value={form.materialRecuperado} onChange={set("materialRecuperado")} type="number" placeholder="0"/>
-        </div>}
-
-        {form.etapa==="peletizadora"&&<div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <F label="Material entrada (lbs)" value={form.peletEntrada} onChange={set("peletEntrada")} type="number" placeholder="0"/>
-            <F label="Pellets producidos (lbs)" value={form.peletSalida} onChange={set("peletSalida")} type="number" placeholder="0"/>
-          </div>
-          <div style={{marginTop:12}}><F label="Desperdicios (lbs)" value={form.peletDesperdicio} onChange={set("peletDesperdicio")} type="number" placeholder="0"/></div>
-          <div style={{marginTop:10,background:B.green+"12",borderRadius:8,padding:"9px 12px",fontSize:12,color:B.green,fontWeight:600}}>🔄 Los pellets producidos se agregarán a materia prima como material peletizado para fundas</div>
-        </div>}
-
-        {form.etapa==="maquina"&&<div>
-          <S label="Motivo" value={form.motivoParada} onChange={set("motivoParada")} options={[{v:"",l:"— Seleccionar —"},...MOTIVOS_PARADA.map(m=>({v:m,l:m}))]}/>
-          <div style={{marginTop:12}}><F label="Duración de parada (horas)" value={form.duracionParada} onChange={set("duracionParada")} type="number" placeholder="Ej: 2.5"/></div>
-          <div style={{marginTop:12}}><F label="Piezas necesarias" value={form.piezasNecesarias} onChange={set("piezasNecesarias")} placeholder="Ej: Rodamiento, correa, tornillo..."/></div>
-          <div style={{marginTop:12}}><F label="Piezas cambiadas" value={form.piezasCambiadas} onChange={set("piezasCambiadas")} placeholder="Qué se cambió o reparó..."/></div>
-        </div>}
-
-        <F label="Notas (opcional)" value={form.notas} onChange={set("notas")} placeholder="Observaciones..."/>
-        <Btn ch={form.etapa==="mezcla"?"✓ Confirmar Lote":"+ Guardar Registro"} fn={save} full color={form.etapa==="mezcla"?"linear-gradient(135deg,"+B.purple+","+B.navy+")":undefined}/>
-      </div>
-    </div>}/>
-
-    {/* Records list */}
-    <div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-        <div style={{color:B.textLight,fontSize:12,fontWeight:700,letterSpacing:.8,textTransform:"uppercase"}}>Registros ({(filt==="mezcla"?filMezcla.length:filt==="all"?filRegs.length+filMezcla.length:filRegs.length)})</div>
-        <Btn ch="📥 Excel" fn={()=>exportToExcel(filRegs.map(r=>({Fecha:r.fecha,Etapa:r.etapa,Máquina:r.maquina,Producto:r.producto||"",Empleado:r.empleado||"",Turno:r.turno||"",Supervisor:r.supervisorNombre||""})),"registros_produccion","Producción")} color={B.navy} outline small/>
-      </div>
-      <div style={{marginBottom:10}}><SearchBar value={buscar} onChange={setBuscar} placeholder="Buscar producto, máquina, empleado..."/></div>
-      <div style={{display:"flex",gap:7,overflowX:"auto",paddingBottom:4,marginBottom:12,scrollbarWidth:"none"}}>
-        {["all",...ETAPAS].map(e=>(<button key={e} onClick={()=>setFilt(e)} style={{background:filt===e?(CE[e]||B.teal):"transparent",border:"1.5px solid "+(filt===e?(CE[e]||B.teal):B.border),borderRadius:20,padding:"7px 14px",color:filt===e?"#fff":B.textMid,fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>{e==="all"?"Todos":ETIQUETAS[e]}</button>))}
-      </div>
-
-      {/* Mezcla batch rows */}
-      {filMezcla.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:filRegs.length>0?12:0}}>
-        {filMezcla.map(b=>(<Card key={b.id} style={{padding:0,overflow:"hidden"}} ch={<div>
-          <div style={{padding:"13px 14px",display:"flex",alignItems:"center",gap:12}}>
-            <div style={{width:36,height:36,borderRadius:10,background:B.purple+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>🧪</div>
-            <div style={{flex:1}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
-                <Badge label={b.lote||"Lote"} color={B.purple}/>
-                {b.turno&&<TurnoBadge turno={b.turno}/>}
-                <span style={{color:B.textLight,fontSize:12}}>{b.fecha}</span>
-              </div>
-              <div style={{color:B.textMid,fontSize:13,fontWeight:500}}>
-                {b.empleado&&b.empleado+" · "}
-                <span style={{color:B.teal,fontWeight:700}}>LDPE {b.ldpe} lbs</span> + <span style={{color:B.navy,fontWeight:700}}>MLLDPE {b.mlldpe} lbs</span> = <span style={{color:B.textDark,fontWeight:800}}>{b.total} lbs</span>
-              </div>
-            </div>
-            {isSartori(sup)&&<button onClick={()=>{if(confirmDelete(sup,"¿Eliminar esta mezcla de resina?")){dbLogAudit("delete","resina_batches",b.id,sup.nombre);setResinaLogs(p=>p.filter(x=>x.id!==b.id));dbDeleteResina(b.id);}}} style={{background:"none",border:"none",color:B.textLight,cursor:"pointer",fontSize:16,padding:4}}>✕</button>}
-          </div>
-          {b.notas&&<div style={{borderTop:"1px solid "+B.border,padding:"8px 14px",background:B.bg,color:B.textMid,fontSize:12}}>📝 {b.notas}</div>}
-        </div>}/>))}
-      </div>}
-
-      {/* Regular production rows */}
-      {filRegs.length===0&&filMezcla.length===0?<Card style={{textAlign:"center",padding:32,border:"1.5px dashed "+B.border}} ch={<div style={{color:B.textLight,fontSize:14}}>Sin registros aún.</div>}/>
-      :<div style={{display:"flex",flexDirection:"column",gap:8}}>{filRegs.map(r=><LogRow key={r.id} log={r} sup={sup} onDel={id=>{dbLogAudit("delete","registros",id,sup.nombre);setRegs(p=>p.filter(x=>x.id!==id));dbDelete(id);}}/>)}</div>}
     </div>
+
+    {/* Costos Generales config — overhead per lb for electricity / labor / packaging */}
+    {showCostosCfg&&<Card accent={B.navy} ch={<div>
+      <div style={{color:B.navy,fontSize:12,fontWeight:800,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>⚙️ Costos Generales (por libra)</div>
+      <div style={{fontSize:11,color:B.textLight,marginBottom:12}}>Estos costos se suman al costo de materiales para calcular el costo real de manufactura por receta.</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <S label="Moneda" value={costosGenerales.moneda} onChange={v=>setCG({moneda:v})} options={[{v:"HTG",l:"HTG (Gourdes)"},{v:"US$",l:"US$ (Dólares)"}]}/>
+        <F label="Electricidad / lb" value={costosGenerales.electricidad_per_lb} onChange={v=>setCG({electricidad_per_lb:v})} type="number" placeholder="0.07"/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:10}}>
+        <F label="Mano de obra / lb" value={costosGenerales.labor_per_lb} onChange={v=>setCG({labor_per_lb:v})} type="number" placeholder="0.04"/>
+        <F label="Empaque / lb" value={costosGenerales.empaque_per_lb} onChange={v=>setCG({empaque_per_lb:v})} type="number" placeholder="0.03"/>
+      </div>
+      <div style={{marginTop:10,background:B.bg,borderRadius:8,padding:"9px 12px",fontSize:11,color:B.textLight}}>💡 El costo de materiales viene del campo <strong>$/lb</strong> en cada receta. Los costos generales son un promedio asignado a todos los lotes.</div>
+    </div>}/>}
+
+    {modo&&<Card accent={B.teal} ch={<div>
+      <div style={{color:B.teal,fontSize:12,fontWeight:800,letterSpacing:1,textTransform:"uppercase",marginBottom:14}}>{editId?"Editar receta":"Nueva receta"}</div>
+      <div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:16}}>
+        <F label="Nombre" value={form.nombre} onChange={set("nombre")} placeholder='Ej: Presión SDR-26 1"'/>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <S label="Tipo" value={form.tipo} onChange={set("tipo")} options={FORMULAS_PVC.map(t=>({v:t,l:t}))}/>
+          <S label="Diámetro" value={form.diametro} onChange={set("diametro")} options={[{v:"",l:"— Cualquiera —"},...(PVC_TAMANOS[form.tipo]||PVC_TAMANOS["SDR-26"]||[]).map(d=>({v:d,l:d}))]}/>
+        </div>
+        <F label="Descripción (opcional)" value={form.descripcion} onChange={set("descripcion")} placeholder="Notas sobre esta receta"/>
+
+        {/* Materials list */}
+        <div style={{background:B.bg,borderRadius:12,padding:"12px 14px",border:"1.5px solid "+B.border}}>
+          <div style={{fontSize:11,fontWeight:800,letterSpacing:.8,textTransform:"uppercase",color:B.textLight,marginBottom:10}}>Materiales</div>
+          {form.materiales.length===0?<div style={{color:B.textLight,fontSize:12,fontStyle:"italic",marginBottom:10}}>Aún no hay materiales</div>:<div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
+            {form.materiales.map(m=>(<div key={m.material_id} style={{display:"flex",alignItems:"center",gap:10,background:"#fff",borderRadius:8,padding:"8px 10px",border:"1px solid "+B.border}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:700,color:B.textDark,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.material_nombre}</div>
+                <div style={{fontSize:11,color:B.textLight}}>{m.cantidad} {m.unidad}{m.costo_unitario?" · $"+m.costo_unitario+"/"+m.unidad:""}</div>
+              </div>
+              <button onClick={()=>removeMaterial(m.material_id)} style={{background:"none",border:"none",color:B.red,cursor:"pointer",fontSize:14,padding:4}}>✕</button>
+            </div>))}
+          </div>}
+          <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:6}}>
+            <select value={matSel} onChange={e=>setMatSel(e.target.value)} style={Object.assign({},iS,{padding:"9px 10px",fontSize:13})}>
+              {mat.map(m=><option key={m.id} value={m.id}>{m.nombre}</option>)}
+            </select>
+            <input type="number" value={matCant} onChange={e=>setMatCant(e.target.value)} placeholder="Cant" style={Object.assign({},iS,{padding:"9px 10px",fontSize:13})}/>
+            <input type="number" value={matCosto} onChange={e=>setMatCosto(e.target.value)} placeholder="$/lb" style={Object.assign({},iS,{padding:"9px 10px",fontSize:13})}/>
+          </div>
+          <div style={{marginTop:8}}><Btn ch="+ Agregar material" fn={addMaterial} small outline color={B.teal} full/></div>
+          {totalLbs>0&&(()=>{
+            const cb=computeRecipeCost(form,costosGenerales);
+            return(<div style={{marginTop:10,paddingTop:10,borderTop:"1px solid "+B.border}}>
+              <div style={{fontSize:11,fontWeight:800,letterSpacing:.6,textTransform:"uppercase",color:B.textLight,marginBottom:8}}>📊 Costo Real de Manufactura</div>
+              <div style={{display:"flex",flexDirection:"column",gap:4,fontSize:12}}>
+                <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:B.textMid}}>Materiales</span><span style={{color:B.textDark,fontWeight:700}}>{fmtMoney(cb.materialesCost,cb.moneda)}</span></div>
+                {cb.electricidad>0&&<div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:B.textMid}}>Electricidad ({totalLbs.toFixed(0)} lbs × {cb.moneda} {Number(costosGenerales.electricidad_per_lb).toFixed(3)})</span><span style={{color:B.textDark,fontWeight:700}}>{fmtMoney(cb.electricidad,cb.moneda)}</span></div>}
+                {cb.labor>0&&<div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:B.textMid}}>Mano de obra</span><span style={{color:B.textDark,fontWeight:700}}>{fmtMoney(cb.labor,cb.moneda)}</span></div>}
+                {cb.empaque>0&&<div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:B.textMid}}>Empaque</span><span style={{color:B.textDark,fontWeight:700}}>{fmtMoney(cb.empaque,cb.moneda)}</span></div>}
+              </div>
+              <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid "+B.border,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{color:B.textDark,fontSize:13,fontWeight:800}}>TOTAL · {totalLbs.toFixed(1)} lbs</span>
+                <div style={{textAlign:"right"}}>
+                  <div style={{color:B.green,fontSize:16,fontWeight:800}}>{fmtMoney(cb.total,cb.moneda)}</div>
+                  <div style={{color:B.textLight,fontSize:11,fontWeight:600}}>{fmtMoney(cb.perLb,cb.moneda)} / lb</div>
+                </div>
+              </div>
+              {(costosGenerales.electricidad_per_lb==0&&costosGenerales.labor_per_lb==0&&costosGenerales.empaque_per_lb==0)&&<div style={{marginTop:6,fontSize:10,color:B.amber,fontWeight:600}}>⚠️ Costos generales no configurados — solo se muestran materiales. Click "⚙️ Costos" arriba.</div>}
+            </div>);
+          })()}
+        </div>
+
+        <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}>
+          <input type="checkbox" checked={form.activa} onChange={e=>set("activa")(e.target.checked)}/>
+          <span style={{fontSize:13,color:B.textMid,fontWeight:600}}>Activa (disponible para usar en producción)</span>
+        </label>
+      </div>
+      <Btn ch={editId?"✓ Guardar cambios":"✓ Crear receta"} fn={save} color={"linear-gradient(135deg,"+B.teal+","+B.navy+")"} full/>
+    </div>}/>}
+
+    {!modo&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
+      <SearchBar value={buscar} onChange={setBuscar} placeholder="Buscar receta..."/>
+      <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:12,color:B.textLight}}>
+        <input type="checkbox" checked={showInactive} onChange={e=>setShowInactive(e.target.checked)}/>
+        Mostrar inactivas
+      </label>
+    </div>}
+
+    {!modo&&filtered.length===0&&<Card style={{textAlign:"center",padding:32,border:"1.5px dashed "+B.border}} ch={<div style={{color:B.textLight,fontSize:14}}>{recetas.length===0?"Aún no hay recetas. Crea la primera para empezar.":"Ninguna receta coincide con la búsqueda."}</div>}/>}
+
+    {!modo&&filtered.map(r=>{
+      const total=(r.materiales||[]).reduce((s,x)=>s+(Number(x.cantidad)||0),0);
+      const cb=computeRecipeCost(r,costosGenerales);
+      const isExp=String(expandedCost)===String(r.id);
+      return(<Card key={r.id} accent={r.activa===false?B.border:B.teal} ch={<div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:4}}>
+              <h3 style={{margin:0,fontSize:15,fontWeight:800,color:B.textDark}}>{r.nombre}</h3>
+              {r.activa===false&&<Badge label="Inactiva" color={B.textLight}/>}
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+              <Badge label={r.tipo||"Otro"} color={B.teal}/>
+              {r.diametro&&<Badge label={r.diametro} color={B.navy}/>}
+              <span style={{color:B.textLight,fontSize:11}}>{(r.materiales||[]).length} materiales · {total.toFixed(1)} lbs</span>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:4,flexShrink:0}}>
+            <button onClick={()=>toggleActive(r)} title={r.activa?"Desactivar":"Activar"} style={{background:"none",border:"1px solid "+B.border,borderRadius:8,padding:"5px 9px",cursor:"pointer",fontSize:12}}>{r.activa?"⏸":"▶"}</button>
+            <button onClick={()=>startEdit(r)} title="Editar" style={{background:"none",border:"1px solid "+B.border,borderRadius:8,padding:"5px 9px",cursor:"pointer",fontSize:12}}>✏️</button>
+            {isSartori(sup)&&<button onClick={()=>del(r)} title="Eliminar" style={{background:"none",border:"1px solid "+B.red+"44",borderRadius:8,padding:"5px 9px",cursor:"pointer",fontSize:12,color:B.red}}>🗑</button>}
+          </div>
+        </div>
+        {r.descripcion&&<div style={{color:B.textMid,fontSize:12,marginBottom:8}}>{r.descripcion}</div>}
+
+        {/* Cost summary bar — click to expand for full breakdown */}
+        {cb.total>0&&<button onClick={()=>setExpandedCost(isExp?null:r.id)} style={{width:"100%",background:B.green+"10",border:"1px solid "+B.green+"33",borderRadius:10,padding:"10px 12px",marginBottom:8,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontSize:12,fontWeight:700,color:B.green}}>💰 Costo manufactura</span>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:14,fontWeight:800,color:B.green}}>{fmtMoney(cb.total,cb.moneda)}</div>
+              <div style={{fontSize:10,color:B.textLight,fontWeight:600}}>{fmtMoney(cb.perLb,cb.moneda)} / lb</div>
+            </div>
+            <span style={{color:B.green,fontSize:12,fontWeight:700}}>{isExp?"▲":"▼"}</span>
+          </div>
+        </button>}
+
+        {/* Expanded cost breakdown */}
+        {isExp&&cb.total>0&&<div style={{background:B.bg,borderRadius:10,padding:"10px 12px",marginBottom:8,fontSize:12}}>
+          <div style={{fontSize:10,fontWeight:800,letterSpacing:.6,textTransform:"uppercase",color:B.textLight,marginBottom:6}}>Desglose por componente</div>
+          {cb.lines.map((l,i)=>(<div key={i} style={{display:"flex",justifyContent:"space-between",padding:"3px 0"}}>
+            <span style={{color:B.textMid}}>{l.nombre} <span style={{color:B.textLight,fontSize:10}}>· {l.cantidad} lbs × {fmtMoney(l.costo,cb.moneda)}/lb</span></span>
+            <span style={{color:B.textDark,fontWeight:700}}>{fmtMoney(l.subtotal,cb.moneda)}</span>
+          </div>))}
+          {cb.electricidad>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"3px 0"}}><span style={{color:B.textMid}}>Electricidad <span style={{color:B.textLight,fontSize:10}}>· {cb.totalLbs.toFixed(0)} lbs × {fmtMoney(costosGenerales.electricidad_per_lb,cb.moneda)}/lb</span></span><span style={{color:B.textDark,fontWeight:700}}>{fmtMoney(cb.electricidad,cb.moneda)}</span></div>}
+          {cb.labor>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"3px 0"}}><span style={{color:B.textMid}}>Mano de obra <span style={{color:B.textLight,fontSize:10}}>· {cb.totalLbs.toFixed(0)} lbs × {fmtMoney(costosGenerales.labor_per_lb,cb.moneda)}/lb</span></span><span style={{color:B.textDark,fontWeight:700}}>{fmtMoney(cb.labor,cb.moneda)}</span></div>}
+          {cb.empaque>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"3px 0"}}><span style={{color:B.textMid}}>Empaque <span style={{color:B.textLight,fontSize:10}}>· {cb.totalLbs.toFixed(0)} lbs × {fmtMoney(costosGenerales.empaque_per_lb,cb.moneda)}/lb</span></span><span style={{color:B.textDark,fontWeight:700}}>{fmtMoney(cb.empaque,cb.moneda)}</span></div>}
+          <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid "+B.border,display:"flex",justifyContent:"space-between"}}>
+            <span style={{color:B.textDark,fontWeight:800}}>TOTAL</span>
+            <span style={{color:B.green,fontWeight:800}}>{fmtMoney(cb.total,cb.moneda)}</span>
+          </div>
+        </div>}
+
+        <div style={{display:"flex",flexDirection:"column",gap:4,paddingTop:8,borderTop:"1px solid "+B.border}}>
+          {(r.materiales||[]).map(m=>(<div key={m.material_id} style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
+            <span style={{color:B.textMid}}>{m.material_nombre}</span>
+            <span style={{color:B.textDark,fontWeight:700}}>{m.cantidad} {m.unidad}{total>0?" · "+((m.cantidad/total)*100).toFixed(1)+"%":""}</span>
+          </div>))}
+        </div>
+      </div>}/>);
+    })}
   </div>);
 }
 
+// Helper: apply a recipe to a Mezcla form. Returns patch with ldpeMezcla/mlldpeMezcla/recicladoMezcla
+function applyRecipeToMezcla(receta){
+  const out={ldpeMezcla:"",mlldpeMezcla:"",recicladoMezcla:""};
+  (receta.materiales||[]).forEach(m=>{
+    if(m.material_id==="ldpe")out.ldpeMezcla=String(m.cantidad);
+    else if(m.material_id==="mlldpe")out.mlldpeMezcla=String(m.cantidad);
+    else if(m.material_id==="material_reciclado_pvc")out.recicladoMezcla=String(m.cantidad);
+  });
+  return out;
+}
+
 // ── Órdenes (with shipment tracking) ──────────────────────────────────────────
-const ETAPAS_ORDEN=["pendiente","mezcla","extrusion","calibracion","corte","empaque","listo"];
-const ETIQ_ORDEN={pendiente:"Pendiente",mezcla:"🧪 Mezcla",extrusion:"⚙️ Extrusión",calibracion:"📏 Calibración",corte:"✂️ Corte",empaque:"📦 Empaque",listo:"✓ Listo",enviado:"🚚 Enviado"};
-const COLOR_ORDEN={pendiente:B.textLight,mezcla:"#7C3AED",extrusion:B.teal,calibracion:"#0D9488",corte:"#4E7C59",empaque:"#B45309",listo:B.green,enviado:B.navy};
+const ETAPAS_ORDEN=["pendiente","materia_prima","mezcla","extrusion","producto_final","listo"];
+const ETIQ_ORDEN={pendiente:"Pendiente",materia_prima:"📦 Materia Prima",mezcla:"🧪 Mezcla",extrusion:"⚙️ Extrusión",producto_final:"✓ Producto Final",listo:"✓ Listo",enviado:"🚚 Enviado"};
+const COLOR_ORDEN={pendiente:B.textLight,materia_prima:"#B45309",mezcla:"#7C3AED",extrusion:B.teal,producto_final:B.green,listo:B.green,enviado:B.navy};
 
 function Ordenes({ordenes,setOrdenes,productoLogs,setProductoLogs,sup,clientes,setClientes,regs}){
   const [modo,setModo]=useState(false);
@@ -1757,7 +1934,7 @@ function Ordenes({ordenes,setOrdenes,productoLogs,setProductoLogs,sup,clientes,s
             <div style={{marginBottom:8}}><F label={"Producto "+(i+1)} value={it.producto} onChange={v=>setItem(i,"producto",v)} placeholder="Ej: Tubo PVC 1″ SDR-26"/></div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
               <F label="Cantidad" value={it.cantidad} onChange={v=>setItem(i,"cantidad",v)} type="number" placeholder="0"/>
-              <S label="Unidad" value={it.unidad} onChange={v=>setItem(i,"unidad",v)} options={[{v:"uds",l:"Unidades"},{v:"lbs",l:"Libras"},{v:"rollos",l:"Rollos"},{v:"bolsas",l:"Bolsas"}]}/>
+              <S label="Unidad" value={it.unidad} onChange={v=>setItem(i,"unidad",v)} options={[{v:"uds",l:"Unidades"},{v:"piezas",l:"Piezas"},{v:"lbs",l:"Libras"},{v:"m",l:"Metros"}]}/>
             </div>
             {form.items.length>1&&<button onClick={()=>removeItem(i)} style={{background:"none",border:"1px solid "+B.red+"44",color:B.red,borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:12,fontWeight:700}}>✕ Quitar</button>}
           </div>))}
@@ -1827,7 +2004,7 @@ function Rendimiento({regs,resinaLogs}){
       m[key].pelicula+=Number(r.pelicula||0);
       m[key].fundas+=Number(r.bolsasProducidas||0);
       m[key].rollos+=Number(r.rollosProducidos||0);
-      m[key].desperdicio+=Number(r.desperdicio||0)+Number(r.desperdicioImpresion||0)+Number(r.desperdicioSlitter||0)+Number(r.desperdicioCorte||0);
+      m[key].desperdicio+=Number(r.desperdicio||0)+Number(r.desperdicioSlitter||0)+Number(r.desperdicioCorte||0);
       if(r.turno)m[key].turnos.add(r.turno.includes("Noche")?"🌙 Noche":"☀️ Día");
       m[key].etapas.add(ETIQUETAS[r.etapa]||r.etapa);
       if(r.maquina)m[key].maquinas.add(r.maquina);
@@ -1841,7 +2018,7 @@ function Rendimiento({regs,resinaLogs}){
     const m={};
     todasMaquinas.forEach(mq=>{
       const etapaKey=Object.entries(MAQUINAS).find(([,v])=>v.includes(mq))?.[0]||"";
-      m[mq]={maquina:mq,etapa:etapaKey,registros:0,pelicula:0,fundas:0,rollos:0,desperdicio:0,lbsImpresion:0,turnos:new Set(),operadores:new Set()};
+      m[mq]={maquina:mq,etapa:etapaKey,registros:0,pelicula:0,fundas:0,rollos:0,desperdicio:0,turnos:new Set(),operadores:new Set()};
     });
     allRegs.forEach(r=>{
       if(!r.maquina||!m[r.maquina])return;
@@ -1849,8 +2026,7 @@ function Rendimiento({regs,resinaLogs}){
       m[r.maquina].pelicula+=Number(r.pelicula||0);
       m[r.maquina].fundas+=Number(r.bolsasProducidas||0);
       m[r.maquina].rollos+=Number(r.rollosProducidos||0);
-      m[r.maquina].lbsImpresion+=Number(r.lbsImpresion||0);
-      m[r.maquina].desperdicio+=Number(r.desperdicio||0)+Number(r.desperdicioImpresion||0)+Number(r.desperdicioSlitter||0)+Number(r.desperdicioCorte||0);
+      m[r.maquina].desperdicio+=Number(r.desperdicio||0)+Number(r.desperdicioSlitter||0)+Number(r.desperdicioCorte||0);
       if(r.turno)m[r.maquina].turnos.add(r.turno.includes("Noche")?"🌙":"☀️");
       if(r.empleado)m[r.maquina].operadores.add(r.empleado.split(" ")[0]);
     });
@@ -1860,7 +2036,7 @@ function Rendimiento({regs,resinaLogs}){
   const bySup=useMemo(()=>{
     const m={};
     SUPERVISORES.forEach(s=>{m[s.codigo]={nombre:s.nombre,codigo:s.codigo,registros:0,pelicula:0,fundas:0,desperdicio:0};});
-    base.forEach(r=>{const k=r.supervisorCodigo;if(!m[k])return;m[k].registros++;m[k].pelicula+=Number(r.pelicula||0);m[k].fundas+=Number(r.bolsasProducidas||0);m[k].desperdicio+=Number(r.desperdicio||0)+Number(r.desperdicioImpresion||0)+Number(r.desperdicioSlitter||0)+Number(r.desperdicioCorte||0);});
+    base.forEach(r=>{const k=r.supervisorCodigo;if(!m[k])return;m[k].registros++;m[k].pelicula+=Number(r.pelicula||0);m[k].fundas+=Number(r.bolsasProducidas||0);m[k].desperdicio+=Number(r.desperdicio||0)+Number(r.desperdicioSlitter||0)+Number(r.desperdicioCorte||0);});
     return Object.values(m).sort((a,b)=>b.registros-a.registros);
   },[base]);
 
@@ -1872,7 +2048,7 @@ function Rendimiento({regs,resinaLogs}){
   const totalRegs=base.length;
   const totalFilm=base.reduce((s,r)=>s+Number(r.pelicula||0),0);
   const totalFundas=base.reduce((s,r)=>s+Number(r.bolsasProducidas||0),0);
-  const totalDesp=base.reduce((s,r)=>s+Number(r.desperdicio||0)+Number(r.desperdicioImpresion||0)+Number(r.desperdicioSlitter||0)+Number(r.desperdicioCorte||0),0);
+  const totalDesp=base.reduce((s,r)=>s+Number(r.desperdicio||0)+Number(r.desperdicioSlitter||0)+Number(r.desperdicioCorte||0),0);
   const periodoLabel=fechaCustom?fechaCustom:(periodo==="diario"?"hoy":periodo==="semanal"?"esta semana":"este mes");
   const perLabel={diario:"hoy",semanal:"esta semana",mensual:"este mes"};
 
@@ -2326,7 +2502,7 @@ function ProductoTerminado({logs,setLogs,ordenes,sup,regs,clientes,setClientes,f
       </div>
       <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10}}>
         <F label="Cantidad" value={form.cantidad} onChange={set("cantidad")} type="number" placeholder="0"/>
-        <S label="Unidad" value={form.unidad} onChange={set("unidad")} options={[{v:"uds",l:"uds"},{v:"lbs",l:"lbs"},{v:"rollos",l:"rollos"}]}/>
+        <S label="Unidad" value={form.unidad} onChange={set("unidad")} options={[{v:"uds",l:"uds"},{v:"piezas",l:"piezas"},{v:"lbs",l:"lbs"},{v:"m",l:"m"}]}/>
       </div>
       {modo==="compra"&&<F label="Proveedor" value={form.destino} onChange={set("destino")} placeholder="Nombre del proveedor"/>}
       {modo==="entrada"&&<F label="Proveedor (opcional)" value={form.destino} onChange={set("destino")} placeholder="Dejar vacío si es producción propia"/>}
@@ -2372,39 +2548,79 @@ function ProductoTerminado({logs,setLogs,ordenes,sup,regs,clientes,setClientes,f
 }
 
 // ── Producción Simple (replaces Flujo) ───────────────────────────────────────
-function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,movs,setMovs,ordenes,setOrdenes,productoLogs,setProductoLogs,lotes,setLotes}){
+function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,movs,setMovs,ordenes,setOrdenes,productoLogs,setProductoLogs,lotes,setLotes,recetas}){
   // ── Date navigation (view any day) ──
   const hoyStr=new Date().toISOString().split("T")[0];
   const [fechaVer,setFechaVer]=useState(hoyStr);
   const readOnly=fechaVer!==hoyStr;
   const ayerStr=(()=>{const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().split("T")[0];})();
+  // ── Materia Prima entry state ──
+  const [mpOpen,setMpOpen]=useState(false);
+  const [mpMaterial,setMpMaterial]=useState("Compuesto PVC pre-mezclado");
+  const [mpCantidad,setMpCantidad]=useState("");
+  const [mpProveedor,setMpProveedor]=useState("");
+  const [mpLote,setMpLote]=useState("");
+  const [mpNotas,setMpNotas]=useState("");
+  const saveMP=()=>{
+    if(readOnly)return;
+    if(!mpCantidad||Number(mpCantidad)<=0)return;
+    const lbs=Number(mpCantidad);
+    const matName=mpMaterial||"Material";
+    const matId=matName.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
+    setMat(p=>{
+      const exists=p.find(x=>x.id===matId);
+      if(exists)return p.map(x=>x.id===matId?Object.assign({},x,{stockActual:(x.stockActual||0)+lbs}):x);
+      return [...p,{id:matId,nombre:matName,stockActual:lbs,stockMinimo:0,unidad:"lbs"}];
+    });
+    const mv={id:Date.now()+Math.random(),tipo:"entrada",materialId:matId,materialNombre:matName,cantidad:lbs,unidad:"lbs",proveedor:mpProveedor||"",maquina:"Almacén",fecha:fechaVer,supervisor:sup.nombre,notas:(mpLote?"Lote: "+mpLote:"")+(mpNotas?(mpLote?" · ":"")+mpNotas:"")};
+    setMovs(p=>[mv,...p]);qSaveMovimiento(mv);
+    logEvent("material.received","inventario_movimientos",mv.id,{material:matName,lbs,proveedor:mpProveedor||null,lote:mpLote||null},sup);
+    setMpCantidad("");setMpProveedor("");setMpLote("");setMpNotas("");setMpOpen(false);
+  };
+
   // ── Mezcla state ──
   const [mezOpen,setMezOpen]=useState(false);
   const [ldpe,setLdpe]=useState("");
   const [mlldpe,setMlldpe]=useState("");
+  const [reciclado,setReciclado]=useState("");
   const [mezMaq,setMezMaq]=useState("MEZ-1");
   const [mezEmp,setMezEmp]=useState("");
   const [mezNota,setMezNota]=useState("");
   const [mezLoteId,setMezLoteId]=useState("");
   const [mezFecha,setMezFecha]=useState(hoyStr);
+  const [mezRecetaId,setMezRecetaId]=useState("");
   // Keep mezcla fecha in sync with date-view picker
   React.useEffect(()=>{setMezFecha(fechaVer);},[fechaVer]);
 
-  const mezTotal=()=>(Number(ldpe)||0)+(Number(mlldpe)||0);
+  const mezTotal=()=>(Number(ldpe)||0)+(Number(mlldpe)||0)+(Number(reciclado)||0);
+  const aplicarReceta=(recId)=>{
+    setMezRecetaId(recId);
+    if(!recId){setLdpe("");setMlldpe("");setReciclado("");return;}
+    const r=(recetas||[]).find(x=>String(x.id)===String(recId));
+    if(!r)return;
+    const patch=applyRecipeToMezcla(r);
+    setLdpe(patch.ldpeMezcla||"");
+    setMlldpe(patch.mlldpeMezcla||"");
+    setReciclado(patch.recicladoMezcla||"");
+  };
   const saveMezcla=()=>{
     if(readOnly)return;
     if(!mezTotal())return;
     const loteIdUsed=mezLoteId||null;
-    const b={id:Date.now(),fecha:mezFecha,ldpe:Number(ldpe)||0,mlldpe:Number(mlldpe)||0,total:mezTotal(),maquina:mezMaq,empleado:mezEmp,notas:mezNota,loteId:loteIdUsed};
+    const recVal=Number(reciclado)||0;
+    const recetaUsada=mezRecetaId?(recetas||[]).find(x=>String(x.id)===String(mezRecetaId)):null;
+    const b={id:Date.now(),fecha:mezFecha,ldpe:Number(ldpe)||0,mlldpe:Number(mlldpe)||0,reciclado:recVal,total:mezTotal(),maquina:mezMaq,empleado:mezEmp,notas:(recetaUsada?"Receta: "+recetaUsada.nombre+(mezNota?" · "+mezNota:""):mezNota),loteId:loteIdUsed,recetaId:recetaUsada?recetaUsada.id:null,recetaNombre:recetaUsada?recetaUsada.nombre:null};
     // Deduct from Almacén
-    [["ldpe",b.ldpe],["mlldpe",b.mlldpe]].forEach(([id,val])=>{
+    [["ldpe",b.ldpe],["mlldpe",b.mlldpe],["material_reciclado_pvc",recVal]].forEach(([id,val])=>{
       if(!val)return;
       const m=mat.find(x=>x.id===id);if(!m)return;
       setMat(p=>p.map(x=>x.id===id?Object.assign({},x,{stockActual:Math.max(0,x.stockActual-val)}):x));
       const dmv={id:Date.now()+Math.random(),tipo:"descuento",materialId:id,materialNombre:m.nombre,cantidad:val,unidad:m.unidad,maquina:"Mezcla",fecha:b.fecha,supervisor:sup.nombre};
       setMovs(p=>[dmv,...p]);qSaveMovimiento(dmv);
+      logEvent("material.issued","inventario_movimientos",dmv.id,{material:m.nombre,lbs:val,destino:"mezcla"},sup);
     });
     setResinaLogs(p=>[b,...p]);qSaveResina(b);
+    logEvent("mezcla.confirmed","resina_batches",b.id,{ldpe:b.ldpe,mlldpe:b.mlldpe,reciclado:b.reciclado,total:b.total,receta:b.recetaNombre,maquina:b.maquina,empleado:b.empleado,lote:loteIdUsed},sup);
     // Push into lote.etapas.mezcla if a lote was chosen
     if(loteIdUsed&&setLotes){
       const entry={id:b.id,fecha:b.fecha,lbs_out:b.total,lbs_in:0,desperdicio:0,empleado:b.empleado,maquina:b.maquina,notas:b.notas,ldpe:b.ldpe,mlldpe:b.mlldpe};
@@ -2417,7 +2633,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
         return upd;
       }));
     }
-    setLdpe("");setMlldpe("");setMezNota("");setMezLoteId("");setMezOpen(false);
+    setLdpe("");setMlldpe("");setReciclado("");setMezNota("");setMezLoteId("");setMezRecetaId("");setMezOpen(false);
   };
   // Create a new lote (batch) — called from Mezcla card
   const crearNuevoLote=()=>{
@@ -2426,6 +2642,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
     const nuevo={id:Date.now(),numero,fecha:fechaVer,creadoPor:sup.nombre,etapas:newLoteEtapas()};
     setLotes(prev=>[...prev,nuevo]);
     dbSaveLote(nuevo);
+    logEvent("lote.created","lotes",nuevo.id,{numero,fecha:fechaVer},sup);
     setMezLoteId(String(nuevo.id));
     if(!mezOpen)setMezOpen(true);
   };
@@ -2433,10 +2650,8 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
   // ── Stage card state ──
   const STAGES=[
     {id:"extrusion",label:"Extrusión",icon:"⚙️",color:B.teal,fields:["lbs_in","lbs_out","rollosProducidos","tamanoRollo","desperdicio"]},
-    {id:"impresion",label:"Impresora",icon:"🖨️",color:B.navy,fields:["lbs_out","producto","desperdicio"]},
-    {id:"slitter",label:"Slitter",icon:"✂️",color:B.tealDark,fields:["lbs_out","producto","desperdicio"]},
-    {id:"cortadora",label:"Cortadora",icon:"🛠️",color:"#4E7C59",fields:["bolsasProducidas","producto","desperdicio"]},
-    {id:"peletizadora",label:"Peletizadora",icon:"🔄",color:"#0D9488",fields:["peletEntrada","peletSalida","peletDesperdicio"]}
+    {id:"producto_final",label:"Producto Final",icon:"✓",color:B.green,fields:["pfCantidad","pfProducto","pfUnidad"]},
+    {id:"peletizadora",label:"Peletizadora / Crusher",icon:"🔄",color:"#0D9488",fields:["peletEntrada","peletSalida","peletDesperdicio"]}
   ];
 
   const saveReg=(etapa,data)=>{
@@ -2444,8 +2659,10 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
     const fecha=data.fecha||new Date().toISOString().split("T")[0];
     const r=Object.assign({id:Date.now(),fecha,etapa,supervisorNombre:sup.nombre,supervisorCodigo:sup.codigo,turno:data.turno||"☀️ Turno Día"},data);
     setRegs(p=>[r,...p]);qSave(r);
-    // Push into lote.etapas[etapa] if a lote was chosen (extrusion/impresion)
-    if(data.loteId&&setLotes&&(etapa==="extrusion"||etapa==="impresion")){
+    // Domain event — tells you exactly what happened in production terms
+    logEvent("production."+etapa,"registros",r.id,{etapa,maquina:r.maquina,empleado:r.empleado,turno:r.turno,producto:r.producto||r.pfProducto||null,batch:r.batchNumber||null,formula:r.formula||null,lbs_out:Number(r.pelicula||r.lbs_out||r.peletSalida||0),pies:Number(r.piesProducidos||0),tubos:Number(r.rollosProducidos||0),pfCantidad:Number(r.pfCantidad||0),pfUnidad:r.pfUnidad||null,desperdicio:Number(r.desperdicio||r.peletDesperdicio||0)},sup);
+    // Push into lote.etapas[etapa] if a lote was chosen (extrusion only)
+    if(data.loteId&&setLotes&&etapa==="extrusion"){
       const entry={id:r.id,fecha:r.fecha,lbs_in:Number(data.lbs_in)||0,lbs_out:Number(data.lbs_out)||Number(data.pelicula)||0,rollosProducidos:Number(data.rollosProducidos)||0,desperdicio:Number(data.desperdicio)||0,empleado:data.empleado,maquina:data.maquina,producto:data.producto||"",notas:data.notas||""};
       setLotes(prev=>prev.map(L=>{
         if(String(L.id)!==String(data.loteId))return L;
@@ -2466,12 +2683,26 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
       const ptEntry={id:Date.now()+2,fecha,producto:data.producto||"Producto",cantidad:Number(data.bolsasProducidas),unidad:"uds",tipo:"entrada",destino:"",ordenId:"",notas:"Auto: Cortadora "+data.maquina,supervisor:sup.nombre};
       setProductoLogs(p=>[ptEntry,...p]);qSaveProducto(ptEntry);
     }
-    // Auto-stock: peletizadora output → materia prima (material peletizado)
+    // Auto-stock: peletizadora output → materia prima (Material Reciclado PVC) for reuse in Mezcla
     if(etapa==="peletizadora"&&(Number(data.peletSalida)||0)>0){
       const lbs=Number(data.peletSalida);
-      setMat(p=>p.map(x=>x.id==="peletizado"?Object.assign({},x,{stockActual:x.stockActual+lbs}):x));
-      const mv={id:Date.now()+3,tipo:"entrada",materialId:"peletizado",materialNombre:"Material Peletizado",cantidad:lbs,unidad:"lbs",maquina:data.maquina||"PEL-1",fecha,supervisor:sup.nombre,notas:"Auto: Peletizadora — "+lbs+" lbs producidas"};
+      const matId="material_reciclado_pvc";
+      const matName="Material Reciclado PVC";
+      setMat(p=>{
+        const exists=p.find(x=>x.id===matId);
+        if(exists)return p.map(x=>x.id===matId?Object.assign({},x,{stockActual:(x.stockActual||0)+lbs}):x);
+        return [...p,{id:matId,nombre:matName,stockActual:lbs,stockMinimo:0,unidad:"lbs"}];
+      });
+      const mv={id:Date.now()+3,tipo:"entrada",materialId:matId,materialNombre:matName,cantidad:lbs,unidad:"lbs",maquina:data.maquina||"PEL-1",fecha,supervisor:sup.nombre,notas:"Auto: "+(data.maquina||"PEL-1")+" — "+lbs+" lbs polvo reciclado"};
       setMovs(p=>[mv,...p]);qSaveMovimiento(mv);
+      logEvent("recycled.produced","inventario_movimientos",mv.id,{material:matName,lbs,maquina:data.maquina||"PEL-1",entrada_lbs:Number(data.peletEntrada)||0,perdida:Number(data.peletDesperdicio)||0},sup);
+    }
+    // Auto-stock: producto_final → producto_terminado
+    if(etapa==="producto_final"&&(Number(data.pfCantidad)||Number(data.lbs_out)||0)>0){
+      const qty=Number(data.pfCantidad)||Number(data.lbs_out)||0;
+      const ptEntry={id:Date.now()+4,fecha,producto:data.pfProducto||data.producto||"Producto",cantidad:qty,unidad:data.pfUnidad||"uds",tipo:"entrada",destino:"",ordenId:data.ordenId||"",notas:"Auto: Producto Final · "+(data.maquina||""),supervisor:sup.nombre};
+      setProductoLogs(p=>[ptEntry,...p]);qSaveProducto(ptEntry);
+      logEvent("finished_goods.stocked","producto_terminado",ptEntry.id,{producto:ptEntry.producto,cantidad:qty,unidad:ptEntry.unidad,ordenId:data.ordenId||null,maquina:data.maquina||null},sup);
     }
     // Auto-advance linked order
     if(data.ordenId){
@@ -2483,6 +2714,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
           const next=ETAPAS_ORDEN[stgIdx+1];
           setOrdenes(p=>p.map(x=>String(x.id)===String(data.ordenId)?Object.assign({},x,{etapa:next}):x));
           dbUpdateOrder(o.id,{etapa:next});
+          logEvent("order.advanced","ordenes",o.id,{from:o.etapa,to:next,trigger:"production."+etapa,cliente:o.cliente},sup);
         }
       }
     }
@@ -2491,19 +2723,17 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
   const ldpeStock=(mat.find(m=>m.id==="ldpe")||{stockActual:0}).stockActual;
   const mlldpeStock=(mat.find(m=>m.id==="mlldpe")||{stockActual:0}).stockActual;
 
-  // ── Daily chain aggregates (mezcla → extrusion → impresion) for fechaVer ──
+  // ── Daily chain aggregates (mezcla → extrusion → producto_final) for fechaVer ──
   const mezDia=(resinaLogs||[]).filter(b=>b.fecha===fechaVer);
   const extDia=(regs||[]).filter(r=>r.fecha===fechaVer&&r.etapa==="extrusion");
-  const impDia=(regs||[]).filter(r=>r.fecha===fechaVer&&r.etapa==="impresion");
+  const pfDia=(regs||[]).filter(r=>r.fecha===fechaVer&&r.etapa==="producto_final");
   const mezLbsDia=mezDia.reduce((s,b)=>s+(Number(b.total)||0),0);
   const extInDia=extDia.reduce((s,r)=>s+(Number(r.lbs_in)||0),0);
   const extOutDia=extDia.reduce((s,r)=>s+(Number(r.pelicula)||Number(r.lbs_out)||0),0);
   const extRollosDia=extDia.reduce((s,r)=>s+(Number(r.rollosProducidos)||0),0);
   const extDespDia=extDia.reduce((s,r)=>s+(Number(r.desperdicio)||0),0);
-  const impOutDia=impDia.reduce((s,r)=>s+(Number(r.lbs_out)||0),0);
-  const impDespDia=impDia.reduce((s,r)=>s+(Number(r.desperdicio)||0),0);
+  const pfQtyDia=pfDia.reduce((s,r)=>s+(Number(r.pfCantidad)||0),0);
   const rendExt=mezLbsDia>0?((extOutDia/mezLbsDia)*100).toFixed(0):null;
-  const rendImp=extOutDia>0?((impOutDia/extOutDia)*100).toFixed(0):null;
 
   return(<div style={{display:"flex",flexDirection:"column",gap:16}}>
     <div><h2 style={{color:B.textDark,fontSize:20,fontWeight:800,margin:"0 0 2px"}}>Producción</h2><p style={{color:B.textLight,fontSize:13,margin:0}}>Registrar etapas de producción</p></div>
@@ -2523,7 +2753,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
       {readOnly&&<div style={{marginTop:10,background:"#F59E0B18",color:"#B45309",borderRadius:10,padding:"8px 12px",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",gap:6}}>🔒 Modo solo lectura — viendo un día pasado. Cambia a "Hoy" para registrar.</div>}
     </div>}/>
 
-    {/* ── Cadena del día: Mezcla → Extrusión → Impresión ── */}
+    {/* ── Cadena del día: Mezcla → Extrusión → Producto Final ── */}
     <Card accent={"#7C3AED44"} ch={<div>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
         <div style={{fontWeight:800,fontSize:14,color:B.textDark}}>🔗 Cadena del día</div>
@@ -2545,23 +2775,46 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
         <div style={{background:B.teal+"10",borderRadius:12,padding:"10px 8px",border:"1px solid "+B.teal+"44"}}>
           <div style={{fontSize:10,fontWeight:800,color:B.teal,textTransform:"uppercase",letterSpacing:.5}}>⚙️ Extrusión</div>
           <div style={{fontSize:18,fontWeight:900,color:B.textDark,marginTop:4}}>{extOutDia.toLocaleString()}</div>
-          <div style={{fontSize:10,color:B.textLight,fontWeight:700}}>lbs · {extRollosDia} rollos</div>
+          <div style={{fontSize:10,color:B.textLight,fontWeight:700}}>lbs · {extRollosDia} tubos</div>
           {extDespDia>0&&<div style={{fontSize:9,color:B.red,fontWeight:700,marginTop:2}}>-{extDespDia} desp.</div>}
         </div>
-        {/* Arrow + rendimiento */}
+        {/* Arrow */}
         <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2}}>
           <div style={{color:B.textLight,fontSize:18,fontWeight:900}}>→</div>
-          {rendImp!==null&&<div style={{fontSize:9,color:B.navy,fontWeight:800}}>{rendImp}%</div>}
         </div>
-        {/* Impresion column */}
-        <div style={{background:B.navy+"10",borderRadius:12,padding:"10px 8px",border:"1px solid "+B.navy+"44"}}>
-          <div style={{fontSize:10,fontWeight:800,color:B.navy,textTransform:"uppercase",letterSpacing:.5}}>🖨️ Impresión</div>
-          <div style={{fontSize:18,fontWeight:900,color:B.textDark,marginTop:4}}>{impOutDia.toLocaleString()}</div>
-          <div style={{fontSize:10,color:B.textLight,fontWeight:700}}>lbs · {impDia.length} reg</div>
-          {impDespDia>0&&<div style={{fontSize:9,color:B.red,fontWeight:700,marginTop:2}}>-{impDespDia} desp.</div>}
+        {/* Producto Final column */}
+        <div style={{background:B.green+"10",borderRadius:12,padding:"10px 8px",border:"1px solid "+B.green+"44"}}>
+          <div style={{fontSize:10,fontWeight:800,color:B.green,textTransform:"uppercase",letterSpacing:.5}}>✓ Producto Final</div>
+          <div style={{fontSize:18,fontWeight:900,color:B.textDark,marginTop:4}}>{pfQtyDia.toLocaleString()}</div>
+          <div style={{fontSize:10,color:B.textLight,fontWeight:700}}>uds · {pfDia.length} reg</div>
         </div>
       </div>
-      {mezLbsDia===0&&extOutDia===0&&impOutDia===0&&<div style={{textAlign:"center",padding:"10px 0 2px",color:B.textLight,fontSize:11,fontStyle:"italic"}}>Sin producción registrada para este día</div>}
+      {mezLbsDia===0&&extOutDia===0&&pfQtyDia===0&&<div style={{textAlign:"center",padding:"10px 0 2px",color:B.textLight,fontSize:11,fontStyle:"italic"}}>Sin producción registrada para este día</div>}
+    </div>}/>
+
+    {/* ── Materia Prima Section ── */}
+    <Card accent={"#B4530944"} ch={<div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:mpOpen?14:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:40,height:40,borderRadius:12,background:"#B4530918",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>📦</div>
+          <div>
+            <div style={{fontWeight:800,fontSize:15,color:B.textDark}}>Materia Prima</div>
+            <div style={{fontSize:12,color:B.textLight}}>Entrada de materiales al almacén</div>
+          </div>
+        </div>
+        <Btn ch={mpOpen?"✕ Cerrar":"+ Registrar"} fn={()=>{if(!readOnly)setMpOpen(!mpOpen);}} color={mpOpen?B.textMid:"#B45309"} small/>
+      </div>
+      {mpOpen&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <S label="Material" value={mpMaterial} onChange={setMpMaterial} options={MATERIAS_PRIMAS.map(m=>({v:m,l:m}))}/>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <F label="Cantidad (lbs)" value={mpCantidad} onChange={setMpCantidad} type="number" placeholder="0"/>
+          <F label="# Lote (opcional)" value={mpLote} onChange={setMpLote} placeholder="L-2025-01"/>
+        </div>
+        <F label="Proveedor (opcional)" value={mpProveedor} onChange={setMpProveedor} placeholder="Nombre"/>
+        <F label="Notas (opcional)" value={mpNotas} onChange={setMpNotas} placeholder="..."/>
+        <div style={{background:"#B4530912",borderRadius:8,padding:"9px 12px",fontSize:12,color:"#B45309",fontWeight:600}}>📦 Se sumará al inventario de materia prima al guardar</div>
+        <Btn ch={readOnly?"🔒 Solo lectura":"✓ Registrar Entrada"} fn={saveMP} color={readOnly?B.textLight:"#B45309"} full/>
+      </div>}
     </div>}/>
 
     {/* ── Mezcla Section ── */}
@@ -2580,21 +2833,37 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
         </div>
       </div>
       {/* Stock display */}
-      {mezOpen&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+      {mezOpen&&(()=>{const recStock=(mat.find(m=>m.id==="material_reciclado_pvc")||{stockActual:0}).stockActual;return(<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
         <div style={{background:B.teal+"12",borderRadius:10,padding:"8px 10px",border:"1px solid "+B.teal+"30"}}>
-          <div style={{fontSize:10,color:B.textLight,fontWeight:700,textTransform:"uppercase"}}>Stock LDPE</div>
-          <div style={{fontSize:18,fontWeight:800,color:B.teal}}>{ldpeStock.toLocaleString()}<span style={{fontSize:11,color:B.textLight}}> lbs</span></div>
+          <div style={{fontSize:10,color:B.textLight,fontWeight:700,textTransform:"uppercase"}}>LDPE</div>
+          <div style={{fontSize:16,fontWeight:800,color:B.teal}}>{ldpeStock.toLocaleString()}<span style={{fontSize:10,color:B.textLight}}> lbs</span></div>
         </div>
         <div style={{background:B.navy+"12",borderRadius:10,padding:"8px 10px",border:"1px solid "+B.navy+"30"}}>
-          <div style={{fontSize:10,color:B.textLight,fontWeight:700,textTransform:"uppercase"}}>Stock MLLDPE</div>
-          <div style={{fontSize:18,fontWeight:800,color:B.navy}}>{mlldpeStock.toLocaleString()}<span style={{fontSize:11,color:B.textLight}}> lbs</span></div>
+          <div style={{fontSize:10,color:B.textLight,fontWeight:700,textTransform:"uppercase"}}>MLLDPE</div>
+          <div style={{fontSize:16,fontWeight:800,color:B.navy}}>{mlldpeStock.toLocaleString()}<span style={{fontSize:10,color:B.textLight}}> lbs</span></div>
         </div>
-      </div>}
+        <div style={{background:"#0D948812",borderRadius:10,padding:"8px 10px",border:"1px solid #0D948830"}}>
+          <div style={{fontSize:10,color:B.textLight,fontWeight:700,textTransform:"uppercase"}}>Reciclado</div>
+          <div style={{fontSize:16,fontWeight:800,color:"#0D9488"}}>{recStock.toLocaleString()}<span style={{fontSize:10,color:B.textLight}}> lbs</span></div>
+        </div>
+      </div>);})()}
       {mezOpen&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
+        {/* Recipe selector */}
+        {(recetas||[]).filter(r=>r.activa!==false).length>0&&<div style={{background:B.teal+"08",border:"1px dashed "+B.teal+"55",borderRadius:10,padding:"10px 12px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+            <span style={{fontSize:12,fontWeight:800,color:B.teal}}>📋 Aplicar receta</span>
+          </div>
+          <select value={mezRecetaId} onChange={e=>aplicarReceta(e.target.value)} style={Object.assign({},iS,{padding:"9px 10px",fontSize:13})}>
+            <option value="">— Sin receta —</option>
+            {(recetas||[]).filter(r=>r.activa!==false).map(r=>{const m=(r.materiales||[]).filter(x=>["ldpe","mlldpe","material_reciclado_pvc"].includes(x.material_id));const total=m.reduce((s,x)=>s+(Number(x.cantidad)||0),0);return(<option key={r.id} value={r.id}>{r.nombre} ({total.toFixed(0)} lbs)</option>);})}
+          </select>
+          {mezRecetaId&&<div style={{marginTop:8,fontSize:11,color:B.textLight}}>✓ Cantidades pre-cargadas. Puedes ajustarlas antes de guardar.</div>}
+        </div>}
         <F label="Fecha" value={mezFecha} onChange={setMezFecha} type="date"/>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
           <F label="LDPE (lbs)" value={ldpe} onChange={setLdpe} type="number" placeholder="0"/>
           <F label="MLLDPE (lbs)" value={mlldpe} onChange={setMlldpe} type="number" placeholder="0"/>
+          <F label="Reciclado (lbs)" value={reciclado} onChange={setReciclado} type="number" placeholder="0"/>
         </div>
         {mezTotal()>0&&<div style={{background:B.bg,borderRadius:10,padding:"8px 12px"}}>
           <span style={{fontSize:12,fontWeight:700,color:B.textMid}}>Total: </span>
@@ -2610,8 +2879,12 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
       </div>}
       {/* Mezcla entries for the selected day */}
       {mezDia.length>0&&mezDia.map(b=>(<div key={b.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderTop:"1px solid "+B.border,marginTop:6}}>
-        <div><span style={{color:B.textDark,fontSize:13,fontWeight:700}}>{(Number(b.total)||0).toLocaleString()} lbs</span><span style={{color:B.textLight,fontSize:11,marginLeft:8}}>{b.empleado||""}</span></div>
-        <div style={{fontSize:11,color:B.textLight}}>{b.ldpe}L / {b.mlldpe}M{b.loteId?" · L"+((lotes||[]).find(L=>String(L.id)===String(b.loteId))||{}).numero:""}</div>
+        <div>
+          <span style={{color:B.textDark,fontSize:13,fontWeight:700}}>{(Number(b.total)||0).toLocaleString()} lbs</span>
+          <span style={{color:B.textLight,fontSize:11,marginLeft:8}}>{b.empleado||""}</span>
+          {b.recetaNombre&&<span style={{background:B.teal+"22",color:B.teal,fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:10,marginLeft:6}}>📋 {b.recetaNombre}</span>}
+        </div>
+        <div style={{fontSize:11,color:B.textLight}}>{b.ldpe||0}L / {b.mlldpe||0}M{Number(b.reciclado)>0?" / "+b.reciclado+"R":""}{b.loteId?" · L"+((lotes||[]).find(L=>String(L.id)===String(b.loteId))||{}).numero:""}</div>
       </div>))}
     </div>}/>
 
@@ -2623,7 +2896,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
     </div>
 
     {/* ── Stage Cards ── */}
-    {STAGES.map(stg=>(<StageCard key={stg.id} stage={stg} regs={regs} onSave={saveReg} onDelete={(id)=>{setRegs(p=>p.filter(x=>x.id!==id));dbDelete(id);}} sup={sup} ordenes={ordenes} fechaVer={fechaVer} readOnly={readOnly} lotes={lotes}/>))}
+    {STAGES.map(stg=>(<StageCard key={stg.id} stage={stg} regs={regs} onSave={saveReg} onDelete={(id)=>{setRegs(p=>p.filter(x=>x.id!==id));dbDelete(id);}} sup={sup} ordenes={ordenes} fechaVer={fechaVer} readOnly={readOnly} lotes={lotes} recetas={recetas} resinaLogs={resinaLogs}/>))}
 
     {/* ── Actividad del día ── */}
     {(()=>{
@@ -2654,7 +2927,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
                 </div>
                 <div style={{fontSize:13,fontWeight:700,color:B.textDark,marginTop:2}}>
                   {isMez&&<span>{(e.total||0).toLocaleString()} lbs ({e.ldpe}L / {e.mlldpe}M)</span>}
-                  {isExt&&<span>{(Number(e.pelicula)||Number(e.lbs_out)||0).toLocaleString()} lbs · {e.rollosProducidos||0} rollos</span>}
+                  {isExt&&<span>{(Number(e.pelicula)||Number(e.lbs_out)||0).toLocaleString()} lbs · {e.rollosProducidos||0} tubos</span>}
                   {isCort&&<span>{e.bolsasProducidas||0} fundas</span>}
                   {isPelet&&<span>{(Number(e.peletEntrada)||0).toLocaleString()} → {(Number(e.peletSalida)||0).toLocaleString()} lbs</span>}
                   {!isMez&&!isExt&&!isCort&&!isPelet&&<span>{(Number(e.lbs_out)||0).toLocaleString()} lbs</span>}
@@ -2670,12 +2943,12 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
   </div>);
 }
 
-function StageCard({stage,regs,onSave,onDelete,sup,ordenes,fechaVer,readOnly,lotes}){
+function StageCard({stage,regs,onSave,onDelete,sup,ordenes,fechaVer,readOnly,lotes,recetas,resinaLogs}){
   const {id:etapa,label,icon,color:col,fields}=stage;
   const isExt=etapa==="extrusion";
-  const isImp=etapa==="impresion";
   const isCort=etapa==="cortadora";
   const isPelet=etapa==="peletizadora";
+  const isPF=etapa==="producto_final";
   const hoyStr=new Date().toISOString().split("T")[0];
   const activeFecha=fechaVer||hoyStr;
   // Entries for the selected day (fechaVer) + recent global totals
@@ -2703,11 +2976,24 @@ function StageCard({stage,regs,onSave,onDelete,sup,ordenes,fechaVer,readOnly,lot
   const [peletDesp,setPeletDesp]=useState("");
   const [ordenId,setOrdenId]=useState("");
   const [loteId,setLoteId]=useState("");
+  // Batch tracking (extrusion only)
+  const [batchNumber,setBatchNumber]=useState("");
+  const [formula,setFormula]=useState("");
+  const [recetaId,setRecetaId]=useState("");
+  const [loteResinaUsado,setLoteResinaUsado]=useState("");
+  const [aditivos,setAditivos]=useState([]);
+  const [piesProducidos,setPiesProducidos]=useState("");
+  const [pvcTipo,setPvcTipo]=useState("Presión");
+  const [pvcDiametro,setPvcDiametro]=useState("1\"");
+  const [pvcLargo,setPvcLargo]=useState("6m");
+  // Producto Final structured selectors
+  const [pfCantidad,setPfCantidad]=useState("");
+  const [pfUnidad,setPfUnidad]=useState("uds");
   // Keep fecha in sync with the parent's date picker
   React.useEffect(()=>{setFecha(activeFecha);},[activeFecha]);
-  // Lotes disponibles para esta etapa (solo extrusion e impresion usan la cadena)
+  // Lotes disponibles para esta etapa (solo extrusion usa la cadena)
   const loteOpts=React.useMemo(()=>{
-    if(!lotes||(!isExt&&!isImp))return[];
+    if(!lotes||!isExt)return[];
     const opts=[{v:"",l:"— Sin lote —"}];
     lotes.forEach((L,i)=>{
       try{
@@ -2718,7 +3004,7 @@ function StageCard({stage,regs,onSave,onDelete,sup,ordenes,fechaVer,readOnly,lot
       }catch(_){}
     });
     return opts;
-  },[lotes,etapa,isExt,isImp]);
+  },[lotes,etapa,isExt]);
 
   // Active orders at or before this stage
   const ordenesDisp=React.useMemo(()=>{
@@ -2735,14 +3021,53 @@ function StageCard({stage,regs,onSave,onDelete,sup,ordenes,fechaVer,readOnly,lot
   const empOpts=[{v:"",l:"— Seleccionar —"},...NOMBRES_EMPLEADOS.map(n=>({v:n,l:n}))];
   const prodOpts=[{v:"",l:"— Producto —"},...[...new Set((ordenes||[]).flatMap(o=>(o.items||[]).map(it=>it.producto)).filter(Boolean))].map(p=>({v:p,l:p})),{v:"Otro",l:"Otro"}];
 
-  const reset=()=>{setLbsIn("");setLbsOut("");setRollos("");setTamano("9.5");setRollosUsados("");setBolsas("");setProducto("");setDesp("");setEmp("");setMaq((MAQUINAS[etapa]||[""])[0]);setTurno("☀️ Turno Día");setNotas("");setFecha(activeFecha);setPeletEntrada("");setPeletSalida("");setPeletDesp("");setOrdenId("");setLoteId("");};
+  const reset=()=>{setLbsIn("");setLbsOut("");setRollos("");setTamano("9.5");setRollosUsados("");setBolsas("");setProducto("");setDesp("");setEmp("");setMaq((MAQUINAS[etapa]||[""])[0]);setTurno("☀️ Turno Día");setNotas("");setFecha(activeFecha);setPeletEntrada("");setPeletSalida("");setPeletDesp("");setOrdenId("");setLoteId("");setBatchNumber("");setFormula("");setRecetaId("");setLoteResinaUsado("");setAditivos([]);setPiesProducidos("");setPfCantidad("");setPfUnidad("uds");};
+
+  // Auto-fill batch number when extrusion form opens
+  React.useEffect(()=>{if(showForm&&isExt&&!batchNumber){setBatchNumber(genBatchNumber(fecha,regs));}},[showForm,isExt,fecha]);
+
+  // Auto-pick formula when tipo changes
+  const onPvcTipoChange=(v)=>{
+    setPvcTipo(v);
+    const sizes=PVC_TAMANOS[v]||[];
+    if(!sizes.includes(pvcDiametro))setPvcDiametro(sizes[0]||"");
+    if(!formula||["Presión","Semi Presión","Presión SDR-26","Presión SCH-40","Drenaje","Eléctrico"].includes(formula)){
+      const fm=v==="Semi Presión"?"Semi Presión":v==="Drenaje"?"Drenaje":v==="SCH-40"?"Presión SCH-40":v==="SDR-26"?"Presión SDR-26":"Presión";
+      setFormula(fm);
+    }
+    setProducto("Tubo PVC "+(sizes.includes(pvcDiametro)?pvcDiametro:(sizes[0]||""))+" "+v+" x "+pvcLargo);
+  };
+  const onPvcDiamChange=(v)=>{setPvcDiametro(v);setProducto("Tubo PVC "+v+" "+pvcTipo+" x "+pvcLargo);};
+  const onPvcLargoChange=(v)=>{setPvcLargo(v);setProducto("Tubo PVC "+pvcDiametro+" "+pvcTipo+" x "+v);};
+
+  // Apply recipe (sets formula and pre-fills batch context)
+  const onRecetaChange=(rid)=>{
+    setRecetaId(rid);
+    if(!rid)return;
+    const r=(recetas||[]).find(x=>String(x.id)===String(rid));
+    if(!r)return;
+    if(r.tipo)setFormula(r.tipo);
+    if(r.diametro){
+      setPvcDiametro(r.diametro);
+      setProducto("Tubo PVC "+r.diametro+" "+(r.tipo||pvcTipo)+" x "+pvcLargo);
+    }
+  };
 
   const handleSave=()=>{
     if(readOnly)return;
     const data={fecha,empleado:emp,maquina:maq,turno,notas,desperdicio:Number(desp)||0,ordenId:ordenId||null,loteId:loteId||null};
     if(isExt){
       data.pelicula=Number(lbsOut)||0;data.lbs_out=Number(lbsOut)||0;
-      data.rollosProducidos=Number(rollos)||0;data.tamanoRollo=tamano;
+      data.rollosProducidos=Number(rollos)||0;
+      // Batch tracking
+      data.batchNumber=batchNumber||genBatchNumber(fecha,regs);
+      data.formula=formula||"";
+      data.recetaId=recetaId||null;
+      data.loteResinaUsado=loteResinaUsado||"";
+      data.aditivos=aditivos||[];
+      data.piesProducidos=Number(piesProducidos)||0;
+      data.pvcTipo=pvcTipo;data.pvcDiametro=pvcDiametro;data.pvcLargo=pvcLargo;
+      data.producto=producto||("Tubo PVC "+pvcDiametro+" "+pvcTipo+" x "+pvcLargo);
       if(!data.pelicula)return;
     }else if(isCort){
       data.bolsasProducidas=Number(bolsas)||0;data.producto=producto;
@@ -2750,6 +3075,13 @@ function StageCard({stage,regs,onSave,onDelete,sup,ordenes,fechaVer,readOnly,lot
     }else if(isPelet){
       data.peletEntrada=Number(peletEntrada)||0;data.peletSalida=Number(peletSalida)||0;data.peletDesperdicio=Number(peletDesp)||0;
       if(!data.peletSalida)return;
+    }else if(isPF){
+      data.pfProducto=producto||("Tubo PVC "+pvcDiametro+" "+pvcTipo+" x "+pvcLargo);
+      data.producto=data.pfProducto;
+      data.pfCantidad=Number(pfCantidad)||0;
+      data.pfUnidad=pfUnidad;
+      data.lbs_out=pfUnidad==="lbs"?data.pfCantidad:0;
+      if(!data.pfCantidad)return;
     }else{
       data.lbs_out=Number(lbsOut)||0;data.producto=producto;
       if(!data.lbs_out)return;
@@ -2771,7 +3103,7 @@ function StageCard({stage,regs,onSave,onDelete,sup,ordenes,fechaVer,readOnly,lot
         <div>
           <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontWeight:800,fontSize:15,color:B.textDark}}>{label}</span>{hasEntries&&<Badge label={entries.length+" reg"} color={col}/>}</div>
           {hasEntries&&<div style={{fontSize:12,color:B.textLight,marginTop:2}}>
-            {isExt&&<span>Total: <span style={{fontWeight:800,color:col}}>{totalLbs.toLocaleString()} lbs · {totalRollos} rollos</span></span>}
+            {isExt&&<span>Total: <span style={{fontWeight:800,color:col}}>{totalLbs.toLocaleString()} lbs · {totalRollos} tubos</span></span>}
             {isCort&&<span>Total: <span style={{fontWeight:800,color:col}}>{totalBolsas.toLocaleString()} fundas</span></span>}
             {isPelet&&<span>Total: <span style={{fontWeight:800,color:col}}>{totalPeletSalida.toLocaleString()} lbs pellets</span></span>}
             {!isExt&&!isCort&&!isPelet&&<span>Total: <span style={{fontWeight:800,color:col}}>{totalLbs.toLocaleString()} lbs</span></span>}
@@ -2786,7 +3118,7 @@ function StageCard({stage,regs,onSave,onDelete,sup,ordenes,fechaVer,readOnly,lot
     {entriesDia.length>0&&entriesDia.slice(0,10).map(e=>(<div key={e.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:B.bg,borderRadius:10,marginBottom:6}}>
       <div style={{flex:1,minWidth:0}}>
         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-          {isExt&&<span style={{fontSize:13,fontWeight:700,color:B.textDark}}>{(Number(e.pelicula)||Number(e.lbs_out)||0).toLocaleString()} lbs · {e.rollosProducidos||0} rollos ({e.tamanoRollo||"—"}")</span>}
+          {isExt&&<span style={{fontSize:13,fontWeight:700,color:B.textDark}}>{(Number(e.pelicula)||Number(e.lbs_out)||0).toLocaleString()} lbs · {e.rollosProducidos||0} tubos</span>}
           {isCort&&<span style={{fontSize:13,fontWeight:700,color:B.textDark}}>{e.bolsasProducidas||0} fundas</span>}
           {isPelet&&<span style={{fontSize:13,fontWeight:700,color:B.textDark}}>{(Number(e.peletEntrada)||0).toLocaleString()} lbs → {(Number(e.peletSalida)||0).toLocaleString()} lbs pellets</span>}
           {!isExt&&!isCort&&!isPelet&&<span style={{fontSize:13,fontWeight:700,color:B.textDark}}>{(Number(e.lbs_out)||0).toLocaleString()} lbs</span>}
@@ -2801,21 +3133,64 @@ function StageCard({stage,regs,onSave,onDelete,sup,ordenes,fechaVer,readOnly,lot
     {/* Form */}
     {showForm&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
       <F label="Fecha" value={fecha} onChange={setFecha} type="date"/>
-      {(isExt||isImp)&&loteOpts.length>1&&<S label="Lote (opcional)" value={loteId} onChange={setLoteId} options={loteOpts}/>}
-      {isExt&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <F label="Salida (lbs)" value={lbsOut} onChange={setLbsOut} type="number" placeholder="0"/>
-        <F label="Rollos producidos" value={rollos} onChange={setRollos} type="number" placeholder="0"/>
+      {isExt&&loteOpts.length>1&&<S label="Lote (opcional)" value={loteId} onChange={setLoteId} options={loteOpts}/>}
+
+      {/* ── EXTRUSION: Batch tracking + Tipo/Diámetro/Largo + Fórmula + Lote resina + Aditivos ── */}
+      {isExt&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
+        <div style={{display:"grid",gridTemplateColumns:"2fr auto",gap:6,alignItems:"end"}}>
+          <F label="# Batch" value={batchNumber} onChange={setBatchNumber} placeholder={genBatchNumber(fecha,regs)}/>
+          <button onClick={()=>setBatchNumber(genBatchNumber(fecha,regs))} style={{background:B.teal+"18",border:"1px solid "+B.teal+"44",borderRadius:10,padding:"10px 12px",color:B.teal,fontSize:12,fontWeight:700,cursor:"pointer",height:42}}>🔢 Auto</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+          <S label="Tipo" value={pvcTipo} onChange={onPvcTipoChange} options={PVC_TIPOS.map(t=>({v:t,l:t}))}/>
+          <S label="Diámetro" value={pvcDiametro} onChange={onPvcDiamChange} options={(PVC_TAMANOS[pvcTipo]||[]).map(d=>({v:d,l:d}))}/>
+          <S label="Largo" value={pvcLargo} onChange={onPvcLargoChange} options={PVC_LARGOS.map(L=>({v:L,l:L}))}/>
+        </div>
+        <div style={{background:col+"10",border:"1px solid "+col+"33",borderRadius:8,padding:"7px 11px",fontSize:11,color:col,fontWeight:700}}>⚙️ Tubo PVC {pvcDiametro} {pvcTipo} x {pvcLargo}</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <S label="Fórmula" value={formula} onChange={setFormula} options={FORMULAS_PVC.map(f=>({v:f,l:f}))}/>
+          <S label="Receta (opc.)" value={recetaId} onChange={onRecetaChange} options={[{v:"",l:"— Sin receta —"},...((recetas||[]).filter(r=>r.activa!==false).map(r=>({v:String(r.id),l:r.nombre})))]}/>
+        </div>
+        <S label="Lote de Resina" value={loteResinaUsado} onChange={setLoteResinaUsado} options={[{v:"",l:"— Ninguno —"},...((resinaLogs||[]).slice(0,15).filter(b=>b.lote||b.id).map(b=>({v:String(b.lote||b.id),l:(b.lote||"Lote-"+String(b.id).slice(-4))+" ("+(b.fecha||"?")+", "+(b.total||0)+" lbs)"})))]}/>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:B.textLight,letterSpacing:.6,textTransform:"uppercase",marginBottom:6}}>Aditivos usados</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+            {ADITIVOS_DEFAULT.map(a=>{const sel=aditivos.includes(a);return(<button key={a} onClick={()=>setAditivos(prev=>sel?prev.filter(x=>x!==a):[...prev,a])} style={{background:sel?col:"transparent",border:"1.5px solid "+(sel?col:B.border),borderRadius:14,padding:"5px 10px",color:sel?"#fff":B.textMid,fontSize:11,fontWeight:600,cursor:"pointer"}}>{sel?"✓ ":""}{a}</button>);})}
+          </div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <F label="Salida (lbs)" value={lbsOut} onChange={setLbsOut} type="number" placeholder="0"/>
+          <F label="Tubos producidos" value={rollos} onChange={setRollos} type="number" placeholder="0"/>
+        </div>
+        <div>
+          <F label="Pies (ft)" value={piesProducidos} onChange={setPiesProducidos} type="number" placeholder="0"/>
+        </div>
       </div>}
-      {isExt&&<S label="Tamaño del rollo" value={tamano} onChange={setTamano} options={[{v:"9.5",l:"9.5 pulgadas"},{v:"13",l:"13 pulgadas"},{v:"tubo",l:"Tubo"},{v:"embalaje",l:"Embalaje"}]}/>}
-      {!isExt&&!isCort&&!isPelet&&<F label="Salida (lbs)" value={lbsOut} onChange={setLbsOut} type="number" placeholder="0"/>}
+
+      {/* ── PRODUCTO FINAL: structured selectors + cantidad/unidad ── */}
+      {isPF&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+          <S label="Tipo" value={pvcTipo} onChange={onPvcTipoChange} options={PVC_TIPOS.map(t=>({v:t,l:t}))}/>
+          <S label="Diámetro" value={pvcDiametro} onChange={onPvcDiamChange} options={(PVC_TAMANOS[pvcTipo]||[]).map(d=>({v:d,l:d}))}/>
+          <S label="Largo" value={pvcLargo} onChange={onPvcLargoChange} options={PVC_LARGOS.map(L=>({v:L,l:L}))}/>
+        </div>
+        <div style={{background:col+"10",border:"1px solid "+col+"33",borderRadius:8,padding:"7px 11px",fontSize:11,color:col,fontWeight:700}}>✓ Tubo PVC {pvcDiametro} {pvcTipo} x {pvcLargo}</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <F label="Cantidad" value={pfCantidad} onChange={setPfCantidad} type="number" placeholder="0"/>
+          <S label="Unidad" value={pfUnidad} onChange={setPfUnidad} options={[{v:"uds",l:"Unidades"},{v:"piezas",l:"Piezas"},{v:"lbs",l:"Libras"},{v:"m",l:"Metros"}]}/>
+        </div>
+        <div style={{background:B.green+"12",borderRadius:8,padding:"9px 12px",fontSize:12,color:B.green,fontWeight:600}}>✓ Se agrega automáticamente al almacén de producto terminado</div>
+      </div>}
+
+      {!isExt&&!isCort&&!isPelet&&!isPF&&<F label="Salida (lbs)" value={lbsOut} onChange={setLbsOut} type="number" placeholder="0"/>}
       {isCort&&<F label="Fundas producidas" value={bolsas} onChange={setBolsas} type="number" placeholder="0"/>}
       {isPelet&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <F label="Material entrada (lbs)" value={peletEntrada} onChange={setPeletEntrada} type="number" placeholder="0"/>
-        <F label="Pellets producidos (lbs)" value={peletSalida} onChange={setPeletSalida} type="number" placeholder="0"/>
+        <F label="Desperdicio entrada (lbs)" value={peletEntrada} onChange={setPeletEntrada} type="number" placeholder="0"/>
+        <F label="Polvo producido (lbs)" value={peletSalida} onChange={setPeletSalida} type="number" placeholder="0"/>
       </div>}
-      {isPelet&&<F label="Desperdicio peletizadora (lbs)" value={peletDesp} onChange={setPeletDesp} type="number" placeholder="0"/>}
-      {isPelet&&<div style={{background:"#0D948812",borderRadius:8,padding:"9px 12px",fontSize:12,color:"#0D9488",fontWeight:600}}>Los pellets producidos se agregan a materia prima como material peletizado</div>}
-      {!isExt&&!isPelet&&<S label="Producto" value={producto} onChange={setProducto} options={prodOpts}/>}
+      {isPelet&&<F label="Pérdida (lbs)" value={peletDesp} onChange={setPeletDesp} type="number" placeholder="0"/>}
+      {isPelet&&<div style={{background:"#0D948815",borderRadius:8,padding:"9px 12px",fontSize:12,color:"#0D9488",fontWeight:600}}>🔄 El polvo producido se agregará a materia prima como "Material Reciclado PVC" — disponible para reusar en Mezcla</div>}
+      {!isExt&&!isPelet&&!isPF&&<S label="Producto" value={producto} onChange={setProducto} options={prodOpts}/>}
       <F label="Desperdicio (lbs)" value={desp} onChange={setDesp} type="number" placeholder="0"/>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <S label="Máquina" value={maq} onChange={setMaq} options={maqOpts}/>
@@ -3044,11 +3419,7 @@ function PanelProduccion({regs,setRegs,ordenes,sup,setVista}){
           <div>
             <div style={gs.label}>Máquina</div>
             <select value={incForm.maquina} onChange={e=>setIncForm(f=>({...f,maquina:e.target.value}))} style={gs.select}>
-              {MAQUINAS.mezcla.map(m=><option key={m} value={m}>{m}</option>)}
-              {MAQUINAS.extrusion.map(m=><option key={m} value={m}>{m}</option>)}
-              {MAQUINAS.calibracion.map(m=><option key={m} value={m}>{m}</option>)}
-              {MAQUINAS.corte.map(m=><option key={m} value={m}>{m}</option>)}
-              {MAQUINAS.empaque.map(m=><option key={m} value={m}>{m}</option>)}
+              {MAQUINA_TODAS.map(m=><option key={m} value={m}>{m}</option>)}
             </select>
           </div>
           <div>
@@ -3076,11 +3447,9 @@ function PanelProduccion({regs,setRegs,ordenes,sup,setVista}){
 function Dashboard({regs,mat,ordenes,resinaLogs,setVista,productoLogs}){
   // ── All-time totals ──
   const tP=regs.filter(r=>r.etapa==="extrusion").reduce((s,r)=>s+(Number(r.pelicula)||0),0);
-  const tD=regs.reduce((s,r)=>s+(Number(r.desperdicio)||0)+(Number(r.desperdicioImpresion)||0)+(Number(r.desperdicioSlitter)||0)+(Number(r.desperdicioCorte)||0),0);
+  const tD=regs.reduce((s,r)=>s+(Number(r.desperdicio)||0)+(Number(r.desperdicioSlitter)||0)+(Number(r.desperdicioCorte)||0),0);
   const tPT=(()=>{const m={};(productoLogs||[]).forEach(l=>{if(!m[l.producto])m[l.producto]={lbsIn:0,lbsOut:0};if(l.unidad==="lbs"){if(l.tipo==="entrada")m[l.producto].lbsIn+=l.cantidad;else if(l.tipo==="salida")m[l.producto].lbsOut+=l.cantidad;}});(regs||[]).forEach(r=>{if(r.producto&&r.etapa==="slitter"&&r.lbsSlitter){if(!m[r.producto])m[r.producto]={lbsIn:0,lbsOut:0};m[r.producto].lbsIn+=Number(r.lbsSlitter)||0;}});return Object.values(m).reduce((s,p)=>s+Math.max(0,p.lbsIn-p.lbsOut),0);})();
   const tRollos=regs.filter(r=>r.etapa==="extrusion").reduce((s,r)=>s+(Number(r.rollosProducidos)||0),0);
-  const tRollos95=regs.filter(r=>r.etapa==="extrusion"&&r.tamanoRollo==="9.5").reduce((s,r)=>s+(Number(r.rollosProducidos)||0),0);
-  const tRollos13=regs.filter(r=>r.etapa==="extrusion"&&r.tamanoRollo==="13").reduce((s,r)=>s+(Number(r.rollosProducidos)||0),0);
   const yld=tP>0?((tP/(tP+tD))*100).toFixed(1):null;
 
   // ── Today ──
@@ -3089,7 +3458,7 @@ function Dashboard({regs,mat,ordenes,resinaLogs,setVista,productoLogs}){
   const lbsHoyExt=regsHoy.filter(r=>r.etapa==="extrusion").reduce((s,r)=>s+(Number(r.pelicula)||Number(r.lbs_out)||0),0);
   const rollosHoy=regsHoy.filter(r=>r.etapa==="extrusion").reduce((s,r)=>s+(Number(r.rollosProducidos)||0),0);
   const fundasHoy=regsHoy.filter(r=>r.etapa==="cortadora").reduce((s,r)=>s+(Number(r.bolsasProducidas)||0),0);
-  const despHoy=regsHoy.reduce((s,r)=>s+(Number(r.desperdicio)||0)+(Number(r.desperdicioImpresion)||0)+(Number(r.desperdicioSlitter)||0)+(Number(r.desperdicioCorte)||0),0);
+  const despHoy=regsHoy.reduce((s,r)=>s+(Number(r.desperdicio)||0)+(Number(r.desperdicioSlitter)||0)+(Number(r.desperdicioCorte)||0),0);
   const wastePct=lbsHoyExt>0?((despHoy/lbsHoyExt)*100).toFixed(1):0;
 
   // ── Yesterday (for comparison) ──
@@ -3099,25 +3468,22 @@ function Dashboard({regs,mat,ordenes,resinaLogs,setVista,productoLogs}){
   const lbsAyer=regsAyer.filter(r=>r.etapa==="extrusion").reduce((s,r)=>s+(Number(r.pelicula)||Number(r.lbs_out)||0),0);
   const rollosAyer=regsAyer.filter(r=>r.etapa==="extrusion").reduce((s,r)=>s+(Number(r.rollosProducidos)||0),0);
   const fundasAyer=regsAyer.filter(r=>r.etapa==="cortadora").reduce((s,r)=>s+(Number(r.bolsasProducidas)||0),0);
-  const despAyer=regsAyer.reduce((s,r)=>s+(Number(r.desperdicio)||0)+(Number(r.desperdicioImpresion)||0)+(Number(r.desperdicioSlitter)||0)+(Number(r.desperdicioCorte)||0),0);
+  const despAyer=regsAyer.reduce((s,r)=>s+(Number(r.desperdicio)||0)+(Number(r.desperdicioSlitter)||0)+(Number(r.desperdicioCorte)||0),0);
   const wastePctAyer=lbsAyer>0?((despAyer/lbsAyer)*100).toFixed(1):0;
 
   // ── Pipeline: lbs per stage today ──
   const pipelineStages=[
+    {id:"materia_prima",label:"Materia Prima",icon:"📦",color:"#B45309",value:0,unit:"lbs"},
     {id:"mezcla",label:"Mezcla",icon:"🧪",color:"#7C3AED",value:(resinaLogs||[]).filter(b=>b.fecha===hoy).reduce((s,b)=>s+(Number(b.total)||0),0),unit:"lbs"},
     {id:"extrusion",label:"Extrusión",icon:"⚙️",color:B.teal,value:lbsHoyExt,unit:"lbs"},
-    {id:"impresion",label:"Impresión",icon:"🖨️",color:B.navy,value:regsHoy.filter(r=>r.etapa==="impresion").reduce((s,r)=>s+(Number(r.lbs_out)||0),0),unit:"lbs"},
-    {id:"slitter",label:"Slitter",icon:"✂️",color:B.tealDark,value:regsHoy.filter(r=>r.etapa==="slitter").reduce((s,r)=>s+(Number(r.lbs_out)||Number(r.lbsSlitter)||0),0),unit:"lbs"},
-    {id:"cortadora",label:"Cortadora",icon:"🛠️",color:"#4E7C59",value:fundasHoy,unit:"fundas"}
+    {id:"producto_final",label:"Producto Final",icon:"✓",color:B.green,value:regsHoy.filter(r=>r.etapa==="producto_final").reduce((s,r)=>s+(Number(r.pfCantidad)||0),0),unit:"uds"}
   ];
   const pipelineMax=Math.max(...pipelineStages.map(s=>s.value),1);
 
   // ── Waste by stage today ──
   const wasteStages=[
     {label:"Extrusión",value:regsHoy.filter(r=>r.etapa==="extrusion").reduce((s,r)=>s+(Number(r.desperdicio)||0),0)},
-    {label:"Impresión",value:regsHoy.filter(r=>r.etapa==="impresion").reduce((s,r)=>s+(Number(r.desperdicioImpresion)||Number(r.desperdicio)||0),0)},
-    {label:"Slitter",value:regsHoy.filter(r=>r.etapa==="slitter").reduce((s,r)=>s+(Number(r.desperdicioSlitter)||Number(r.desperdicio)||0),0)},
-    {label:"Cortadora",value:regsHoy.filter(r=>r.etapa==="cortadora").reduce((s,r)=>s+(Number(r.desperdicioCorte)||Number(r.desperdicio)||0),0)}
+    {label:"Peletizadora",value:regsHoy.filter(r=>r.etapa==="peletizadora").reduce((s,r)=>s+(Number(r.peletDesperdicio)||Number(r.desperdicio)||0),0)}
   ];
   const wasteMax=Math.max(...wasteStages.map(s=>s.value),1);
 
@@ -3127,7 +3493,7 @@ function Dashboard({regs,mat,ordenes,resinaLogs,setVista,productoLogs}){
   const lbsWeek=regsWeek.filter(r=>r.etapa==="extrusion").reduce((s,r)=>s+(Number(r.pelicula)||Number(r.lbs_out)||0),0);
   const rollosWeek=regsWeek.filter(r=>r.etapa==="extrusion").reduce((s,r)=>s+(Number(r.rollosProducidos)||0),0);
   const fundasWeek=regsWeek.filter(r=>r.etapa==="cortadora").reduce((s,r)=>s+(Number(r.bolsasProducidas)||0),0);
-  const despWeek=regsWeek.reduce((s,r)=>s+(Number(r.desperdicio)||0)+(Number(r.desperdicioImpresion)||0)+(Number(r.desperdicioSlitter)||0)+(Number(r.desperdicioCorte)||0),0);
+  const despWeek=regsWeek.reduce((s,r)=>s+(Number(r.desperdicio)||0)+(Number(r.desperdicioSlitter)||0)+(Number(r.desperdicioCorte)||0),0);
   const lbsWeekExt=regsWeek.filter(r=>r.etapa==="extrusion").reduce((s,r)=>s+(Number(r.pelicula)||Number(r.lbs_out)||0),0);
   const wastePctWeek=lbsWeekExt>0?((despWeek/lbsWeekExt)*100).toFixed(1):0;
   const mezclasWeek=(resinaLogs||[]).filter(b=>new Date(b.fecha)>=weekAgo).length;
@@ -3174,7 +3540,7 @@ function Dashboard({regs,mat,ordenes,resinaLogs,setVista,productoLogs}){
     <div style={{color:B.textLight,fontSize:11,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:-8}}>Producción Hoy</div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <Stat label="Lbs Extruidas" value={lbsHoyExt.toLocaleString()} unit="lbs" color={B.teal} sub={"Ayer: "+lbsAyer.toLocaleString()}/>
-      <Stat label="Rollos" value={rollosHoy.toLocaleString()} unit="rollos" color={B.navy} sub={"Ayer: "+rollosAyer.toLocaleString()}/>
+      <Stat label="Tubos" value={rollosHoy.toLocaleString()} unit="tubos" color={B.navy} sub={"Ayer: "+rollosAyer.toLocaleString()}/>
       <Stat label="Fundas" value={fundasHoy.toLocaleString()} unit="uds" color={B.tealDark} sub={"Ayer: "+fundasAyer.toLocaleString()}/>
       <Stat label="Desperdicio" value={wastePct+"%"} color={wColor(wastePct)} sub={"Ayer: "+wastePctAyer+"%"}/>
     </div>
@@ -3218,7 +3584,7 @@ function Dashboard({regs,mat,ordenes,resinaLogs,setVista,productoLogs}){
     <div style={{color:B.textLight,fontSize:11,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:-8}}>Esta Semana</div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <Stat label="Lbs Semana" value={lbsWeek.toLocaleString()} unit="lbs" color={B.teal}/>
-      <Stat label="Rollos Semana" value={rollosWeek.toLocaleString()} unit="rollos" color={B.navy}/>
+      <Stat label="Tubos Semana" value={rollosWeek.toLocaleString()} unit="tubos" color={B.navy}/>
       <Stat label="Fundas Semana" value={fundasWeek.toLocaleString()} unit="uds" color={B.tealDark}/>
       <Stat label="Desperdicio" value={wastePctWeek+"%"} color={wColor(wastePctWeek)} sub={mezclasWeek+" mezclas"}/>
     </div>
@@ -3238,7 +3604,7 @@ function Dashboard({regs,mat,ordenes,resinaLogs,setVista,productoLogs}){
     {/* Almacén */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
       <Stat label="Prod. Term." value={tPT.toLocaleString()} unit="lbs" color={B.green} sub="En Almacén"/>
-      <Stat label="Rollos Disp." value={tRollos.toLocaleString()} unit="rollos" color={B.navy} sub={"9.5\": "+tRollos95+" · 13\": "+tRollos13}/>
+      <Stat label="Tubos Disp." value={tRollos.toLocaleString()} unit="tubos" color={B.navy}/>
     </div>
 
     {/* Eficiencia */}
@@ -3292,6 +3658,7 @@ function GastosModule({gastos,setGastos,sup}){
     const g={id:String(Date.now()),fecha:form.fecha,categoria:form.categoria,monto:Number(form.monto),moneda:form.moneda,descripcion:form.descripcion,proveedor:form.proveedor,creado_por:sup.nombre,created_at:new Date().toISOString()};
     setGastos(prev=>[g,...prev]);
     await dbSaveGasto(g);
+    logEvent("gasto.created","gastos",g.id,{categoria:g.categoria,monto:g.monto,moneda:g.moneda,proveedor:g.proveedor,descripcion:g.descripcion,fecha:g.fecha},sup);
     setForm({fecha:new Date().toISOString().split("T")[0],categoria:"materia_prima",monto:"",moneda:"HTG",descripcion:"",proveedor:""});
     setModo(false);
   };
@@ -3312,8 +3679,8 @@ function GastosModule({gastos,setGastos,sup}){
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
       {CATEGORIAS_GASTO.map(c=>{
-        const catHTG=gastos.filter(g=>g.categoria===c.v&&(g.moneda||"HTG")==="HTG").reduce((s,g)=>s+Number(g.monto),0);
-        const catUSD=gastos.filter(g=>g.categoria===c.v&&g.moneda==="US$").reduce((s,g)=>s+Number(g.monto),0);
+        const catHTG=gastos.filter(g=>normalizeCategoria(g.categoria)===c.v&&(g.moneda||"HTG")==="HTG").reduce((s,g)=>s+Number(g.monto),0);
+        const catUSD=gastos.filter(g=>normalizeCategoria(g.categoria)===c.v&&g.moneda==="US$").reduce((s,g)=>s+Number(g.monto),0);
         return <div key={c.v} style={{background:"#fff",borderRadius:12,padding:"10px 12px",border:"1.5px solid "+B.border}}>
           <div style={{color:B.textLight,fontSize:10,fontWeight:700,textTransform:"uppercase"}}>{c.l}</div>
           {catHTG>0&&<div style={{color:B.textDark,fontSize:16,fontWeight:800}}>HTG {catHTG.toLocaleString()}</div>}
@@ -3340,7 +3707,7 @@ function GastosModule({gastos,setGastos,sup}){
     {gastos.map(g=><Card key={g.id} ch={<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
       <div>
         <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:4}}>
-          <Badge label={(CATEGORIAS_GASTO.find(c=>c.v===g.categoria)||{l:g.categoria}).l} color={B.navy}/>
+          <Badge label={labelCategoria(g.categoria)} color={B.navy}/>
           <span style={{color:B.textLight,fontSize:12}}>{g.fecha}</span>
         </div>
         <div style={{color:B.textDark,fontSize:16,fontWeight:800}}>{g.moneda||"HTG"} {Number(g.monto).toLocaleString()}</div>
@@ -3398,6 +3765,7 @@ function Facturacion({facturas,setFacturas,productoLogs,setProductoLogs,ordenes,
     const factura={id:fId,numero:form.numero,fecha:form.fecha,cliente:form.cliente,ncf:form.ncf||null,moneda:form.moneda||"HTG",orden_id:null,subtotal,impuesto:0,total,estado:"pendiente",notas:form.notas,creado_por:sup.nombre,created_at:new Date().toISOString()};
     setFacturas(prev=>[Object.assign({},factura,{_items:form.items.map((it,i)=>({id:fId+"-"+i,factura_id:fId,producto:it.producto,cantidad:Number(it.cantidad)||0,precio_unitario:Number(it.precio)||0,subtotal:(Number(it.cantidad)||0)*(Number(it.precio)||0)}))}),...prev]);
     await dbSaveFactura(factura);
+    logEvent("factura.created","facturas",fId,{numero:factura.numero,cliente:factura.cliente,total:factura.total,moneda:factura.moneda,items:form.items.length},sup);
     // Auto-save client to directory
     if(form.cliente){
       const existing=(clientes||[]).find(c=>c.nombre&&c.nombre.toLowerCase()===form.cliente.toLowerCase());
@@ -3504,6 +3872,7 @@ function Facturacion({facturas,setFacturas,productoLogs,setProductoLogs,ordenes,
     const pago={id:String(Date.now()),tipo:"cobro",referencia_id:f.id,referencia_tipo:"factura",monto:f.total,fecha:new Date().toISOString().split("T")[0],metodo:"transferencia",notas:"Pago factura "+f.numero,creado_por:sup.nombre,created_at:new Date().toISOString()};
     setPagos(prev=>[pago,...prev]);
     await dbSavePago(pago);
+    logEvent("factura.paid","facturas",f.id,{numero:f.numero,cliente:f.cliente,monto:f.total,moneda:f.moneda||"HTG",pago_id:pago.id,metodo:pago.metodo,full:true},sup);
   };
 
   const del=async(id)=>{dbLogAudit("delete","facturas",id,sup.nombre);setFacturas(prev=>prev.filter(f=>f.id!==id));await dbDeleteFacturaItems(id);await dbDeleteFactura(id);};
@@ -3794,14 +4163,36 @@ function Facturacion({facturas,setFacturas,productoLogs,setProductoLogs,ordenes,
 function CuentasCobrar({facturas,setFacturas,pagos,setPagos,sup}){
   const [payId,setPayId]=useState(null);
   const [payForm,setPayForm]=useState({monto:"",fecha:new Date().toISOString().split("T")[0],metodo:"transferencia"});
+  const [vista,setVista]=useState("aging"); // "aging" | "facturas"
 
-  const pendientes=facturas.filter(f=>f.estado==="pendiente"||f.estado==="parcial");
   const hoy=new Date();
-  const aging=(fecha)=>{const d=Math.floor((hoy-new Date(fecha))/(1000*60*60*24));return d;};
+  const aging=(fecha)=>{if(!fecha)return 0;const d=Math.floor((hoy-new Date(fecha))/(1000*60*60*24));return d;};
 
-  const buckets={a:0,b:0,c:0,d:0};
-  pendientes.forEach(f=>{const d=aging(f.fecha);const amt=Number(f.total||0);if(d<=30)buckets.a+=amt;else if(d<=60)buckets.b+=amt;else if(d<=90)buckets.c+=amt;else buckets.d+=amt;});
-  const totalPend=pendientes.reduce((s,f)=>s+Number(f.total||0),0);
+  // Compute outstanding balance per invoice (total - sum of cobros)
+  const facturasConBalance=facturas.map(f=>{
+    const totalCobrado=(pagos||[]).filter(p=>p.referencia_id===f.id&&p.tipo==="cobro").reduce((s,p)=>s+Number(p.monto||0),0);
+    const balance=Math.max(0,Number(f.total||0)-totalCobrado);
+    return Object.assign({},f,{_cobrado:totalCobrado,_balance:balance,_diasAtraso:aging(f.fecha)});
+  });
+  const pendientes=facturasConBalance.filter(f=>f._balance>0.01);
+
+  // Aggregate aging buckets globally
+  const buckets={b1:0,b2:0,b3:0,b4:0};
+  pendientes.forEach(f=>{const d=f._diasAtraso,bal=f._balance;if(d<=30)buckets.b1+=bal;else if(d<=60)buckets.b2+=bal;else if(d<=90)buckets.b3+=bal;else buckets.b4+=bal;});
+  const totalPend=pendientes.reduce((s,f)=>s+f._balance,0);
+
+  // Group by client → {cliente, b1, b2, b3, b4, total, invoices[]}
+  const clienteAging=React.useMemo(()=>{
+    const m={};
+    pendientes.forEach(f=>{
+      const c=f.cliente||"Sin cliente";
+      if(!m[c])m[c]={cliente:c,b1:0,b2:0,b3:0,b4:0,total:0,invoices:0};
+      const bal=f._balance,d=f._diasAtraso;
+      if(d<=30)m[c].b1+=bal;else if(d<=60)m[c].b2+=bal;else if(d<=90)m[c].b3+=bal;else m[c].b4+=bal;
+      m[c].total+=bal;m[c].invoices+=1;
+    });
+    return Object.values(m).sort((a,b)=>b.total-a.total);
+  },[pendientes]);
 
   const registrarPago=async(f)=>{
     const monto=Number(payForm.monto);if(!monto)return;
@@ -3812,41 +4203,116 @@ function CuentasCobrar({facturas,setFacturas,pagos,setPagos,sup}){
     const nuevoEstado=pagosFactura>=Number(f.total)?"pagada":"parcial";
     setFacturas(prev=>prev.map(x=>x.id===f.id?Object.assign({},x,{estado:nuevoEstado}):x));
     await dbUpdateFactura(f.id,{estado:nuevoEstado});
+    logEvent(nuevoEstado==="pagada"?"factura.paid":"factura.partial_paid","facturas",f.id,{numero:f.numero,cliente:f.cliente,monto,moneda:f.moneda||"HTG",pago_id:pago.id,metodo:pago.metodo,total_factura:f.total,total_cobrado:pagosFactura,saldo:Math.max(0,Number(f.total)-pagosFactura)},sup);
     setPayId(null);setPayForm({monto:"",fecha:new Date().toISOString().split("T")[0],metodo:"transferencia"});
   };
 
+  const exportAging=()=>{
+    const rows=clienteAging.map(c=>({
+      Cliente:c.cliente,
+      Facturas:c.invoices,
+      "0-30d":c.b1.toFixed(2),
+      "31-60d":c.b2.toFixed(2),
+      "61-90d":c.b3.toFixed(2),
+      "90+d":c.b4.toFixed(2),
+      Total:c.total.toFixed(2)
+    }));
+    rows.push({Cliente:"TOTAL",Facturas:pendientes.length,"0-30d":buckets.b1.toFixed(2),"31-60d":buckets.b2.toFixed(2),"61-90d":buckets.b3.toFixed(2),"90+d":buckets.b4.toFixed(2),Total:totalPend.toFixed(2)});
+    exportToExcel(rows,"aging_clientes","Aging");
+  };
+
+  const tabBtn=(id,label)=>(<button onClick={()=>setVista(id)} style={{flex:1,background:vista===id?"#fff":"transparent",border:"none",borderRadius:10,padding:"10px 4px",color:vista===id?B.textDark:B.textLight,fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:vista===id?"0 1px 4px rgba(0,0,0,.1)":"none"}}>{label}</button>);
+
   return(<div style={{display:"flex",flexDirection:"column",gap:16}}>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-      <Stat label="Total por Cobrar" value={"$"+totalPend.toLocaleString()} color={B.amber}/>
+      <Stat label="Total por Cobrar" value={"US$ "+totalPend.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} color={B.amber}/>
       <Stat label="Facturas Pend." value={pendientes.length} color={B.navy}/>
     </div>
+
+    {/* Aging buckets summary */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
-      {[{l:"0-30d",v:buckets.a,c:B.green},{l:"31-60d",v:buckets.b,c:B.amber},{l:"61-90d",v:buckets.c,c:B.red},{l:"90+d",v:buckets.d,c:B.purple}].map(b=><div key={b.l} style={{background:"#fff",borderRadius:10,padding:"8px 10px",border:"1.5px solid "+B.border,textAlign:"center"}}>
-        <div style={{color:B.textLight,fontSize:9,fontWeight:700}}>{b.l}</div>
-        <div style={{color:b.c,fontSize:14,fontWeight:800}}>${b.v.toLocaleString()}</div>
+      {[{l:"0-30 días",v:buckets.b1,c:B.green},{l:"31-60 días",v:buckets.b2,c:B.amber},{l:"61-90 días",v:buckets.b3,c:B.red},{l:"90+ días",v:buckets.b4,c:B.purple}].map(b=><div key={b.l} style={{background:"#fff",borderRadius:10,padding:"8px 10px",border:"1.5px solid "+B.border,textAlign:"center"}}>
+        <div style={{color:B.textLight,fontSize:10,fontWeight:700}}>{b.l}</div>
+        <div style={{color:b.c,fontSize:14,fontWeight:800,marginTop:2}}>${b.v.toLocaleString(undefined,{maximumFractionDigits:0})}</div>
+        {totalPend>0&&<div style={{color:B.textLight,fontSize:9,fontWeight:600}}>{((b.v/totalPend)*100).toFixed(0)}%</div>}
       </div>)}
     </div>
-    {pendientes.map(f=><Card key={f.id} ch={<div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-        <div>
-          <div style={{display:"flex",gap:6,alignItems:"center"}}><span style={{color:B.navy,fontWeight:800}}>{f.numero}</span><Badge label={aging(f.fecha)+" días"} color={aging(f.fecha)>60?B.red:aging(f.fecha)>30?B.amber:B.green}/></div>
-          <div style={{color:B.textMid,fontSize:13}}>{f.cliente}</div>
-        </div>
-        <div style={{textAlign:"right"}}>
-          <div style={{color:B.textDark,fontSize:16,fontWeight:800}}>US$ {Number(f.total||0).toLocaleString()}</div>
-          <div style={{color:B.textLight,fontSize:11}}>{f.fecha}</div>
-        </div>
+
+    {/* Tabs */}
+    <div style={{display:"flex",background:B.bg,borderRadius:12,padding:4,gap:3}}>
+      {tabBtn("aging","📊 Aging por Cliente")}
+      {tabBtn("facturas","📋 Facturas Pendientes")}
+    </div>
+
+    {/* Aging por cliente */}
+    {vista==="aging"&&<Card ch={<div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <div style={{color:B.textLight,fontSize:11,fontWeight:700,letterSpacing:.6,textTransform:"uppercase"}}>Aging por Cliente ({clienteAging.length})</div>
+        <Btn ch="📥 Excel" fn={exportAging} color={B.navy} outline small/>
       </div>
-      {payId===f.id?<div style={{borderTop:"1px solid "+B.border,paddingTop:10,display:"flex",flexDirection:"column",gap:8}}>
-        <F label="Monto (US$)" value={payForm.monto} onChange={v=>setPayForm(p=>Object.assign({},p,{monto:v}))} type="number" placeholder="0.00"/>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <F label="Fecha" value={payForm.fecha} onChange={v=>setPayForm(p=>Object.assign({},p,{fecha:v}))} type="date"/>
-          <S label="Método" value={payForm.metodo} onChange={v=>setPayForm(p=>Object.assign({},p,{metodo:v}))} options={METODOS_PAGO}/>
+      {clienteAging.length===0?<div style={{textAlign:"center",padding:30,color:B.textLight}}>Sin saldos pendientes</div>:
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+          <thead>
+            <tr style={{background:B.bg}}>
+              <th style={{textAlign:"left",padding:"8px 10px",color:B.textLight,fontSize:11,fontWeight:700,letterSpacing:.5}}>Cliente</th>
+              <th style={{textAlign:"right",padding:"8px 8px",color:B.green,fontSize:10,fontWeight:700,letterSpacing:.3}}>0-30d</th>
+              <th style={{textAlign:"right",padding:"8px 8px",color:B.amber,fontSize:10,fontWeight:700,letterSpacing:.3}}>31-60d</th>
+              <th style={{textAlign:"right",padding:"8px 8px",color:B.red,fontSize:10,fontWeight:700,letterSpacing:.3}}>61-90d</th>
+              <th style={{textAlign:"right",padding:"8px 8px",color:B.purple,fontSize:10,fontWeight:700,letterSpacing:.3}}>90+d</th>
+              <th style={{textAlign:"right",padding:"8px 10px",color:B.textDark,fontSize:11,fontWeight:800,letterSpacing:.5}}>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {clienteAging.map(c=>(<tr key={c.cliente} style={{borderTop:"1px solid "+B.border}}>
+              <td style={{padding:"10px",color:B.textDark,fontWeight:700}}>{c.cliente}<div style={{color:B.textLight,fontSize:10,fontWeight:500}}>{c.invoices} factura{c.invoices===1?"":"s"}</div></td>
+              <td style={{textAlign:"right",padding:"8px",color:c.b1>0?B.green:B.textLight,fontWeight:c.b1>0?700:400}}>{c.b1>0?"$"+c.b1.toLocaleString(undefined,{maximumFractionDigits:0}):"—"}</td>
+              <td style={{textAlign:"right",padding:"8px",color:c.b2>0?B.amber:B.textLight,fontWeight:c.b2>0?700:400}}>{c.b2>0?"$"+c.b2.toLocaleString(undefined,{maximumFractionDigits:0}):"—"}</td>
+              <td style={{textAlign:"right",padding:"8px",color:c.b3>0?B.red:B.textLight,fontWeight:c.b3>0?700:400}}>{c.b3>0?"$"+c.b3.toLocaleString(undefined,{maximumFractionDigits:0}):"—"}</td>
+              <td style={{textAlign:"right",padding:"8px",color:c.b4>0?B.purple:B.textLight,fontWeight:c.b4>0?700:400}}>{c.b4>0?"$"+c.b4.toLocaleString(undefined,{maximumFractionDigits:0}):"—"}</td>
+              <td style={{textAlign:"right",padding:"10px",color:B.textDark,fontWeight:800}}>${c.total.toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+            </tr>))}
+            <tr style={{borderTop:"2px solid "+B.textDark,background:B.bg}}>
+              <td style={{padding:"10px",color:B.textDark,fontWeight:800}}>TOTAL</td>
+              <td style={{textAlign:"right",padding:"10px",color:B.green,fontWeight:800}}>${buckets.b1.toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+              <td style={{textAlign:"right",padding:"10px",color:B.amber,fontWeight:800}}>${buckets.b2.toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+              <td style={{textAlign:"right",padding:"10px",color:B.red,fontWeight:800}}>${buckets.b3.toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+              <td style={{textAlign:"right",padding:"10px",color:B.purple,fontWeight:800}}>${buckets.b4.toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+              <td style={{textAlign:"right",padding:"10px",color:B.textDark,fontWeight:800}}>${totalPend.toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>}
+    </div>}/>}
+
+    {/* Facturas pendientes (per-invoice list) */}
+    {vista==="facturas"&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
+      {pendientes.length===0?<div style={{textAlign:"center",padding:30,color:B.textLight}}>No hay facturas pendientes de cobro</div>:
+      pendientes.sort((a,b)=>b._diasAtraso-a._diasAtraso).map(f=><Card key={f.id} ch={<div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+          <div>
+            <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+              <span style={{color:B.navy,fontWeight:800}}>{f.numero}</span>
+              <Badge label={f._diasAtraso+" días"} color={f._diasAtraso>90?B.purple:f._diasAtraso>60?B.red:f._diasAtraso>30?B.amber:B.green}/>
+              {f.estado==="parcial"&&<Badge label="Parcial" color={B.amber}/>}
+            </div>
+            <div style={{color:B.textMid,fontSize:13}}>{f.cliente}</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{color:B.amber,fontSize:16,fontWeight:800}}>US$ {f._balance.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+            <div style={{color:B.textLight,fontSize:11}}>{f.fecha}{f._cobrado>0?" · pagado: $"+f._cobrado.toLocaleString(undefined,{maximumFractionDigits:0}):""}</div>
+          </div>
         </div>
-        <div style={{display:"flex",gap:8}}><Btn ch="Registrar Pago" fn={()=>registrarPago(f)} small/><Btn ch="Cancelar" fn={()=>setPayId(null)} outline small/></div>
-      </div>:<div style={{display:"flex",gap:8,marginTop:6}}><Btn ch="Registrar Pago" fn={()=>setPayId(f.id)} small/></div>}
-    </div>}/>)}
-    {!pendientes.length&&<div style={{textAlign:"center",padding:30,color:B.textLight}}>No hay facturas pendientes de cobro</div>}
+        {payId===f.id?<div style={{borderTop:"1px solid "+B.border,paddingTop:10,display:"flex",flexDirection:"column",gap:8}}>
+          <F label={"Monto (US$, balance: "+f._balance.toFixed(2)+")"} value={payForm.monto} onChange={v=>setPayForm(p=>Object.assign({},p,{monto:v}))} type="number" placeholder="0.00"/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <F label="Fecha" value={payForm.fecha} onChange={v=>setPayForm(p=>Object.assign({},p,{fecha:v}))} type="date"/>
+            <S label="Método" value={payForm.metodo} onChange={v=>setPayForm(p=>Object.assign({},p,{metodo:v}))} options={METODOS_PAGO}/>
+          </div>
+          <div style={{display:"flex",gap:8}}><Btn ch="Registrar Pago" fn={()=>registrarPago(f)} small/><Btn ch="Cancelar" fn={()=>setPayId(null)} outline small/></div>
+        </div>:<div style={{display:"flex",gap:8,marginTop:6}}><Btn ch="Registrar Pago" fn={()=>setPayId(f.id)} small/></div>}
+      </div>}/>)}
+    </div>}
   </div>);
 }
 
@@ -3888,6 +4354,7 @@ function CuentasPagarModule({cuentasPagar,setCuentasPagar,pagos,setPagos,sup,pro
     const c={id:String(Date.now()),proveedor:form.proveedor||form.concepto,concepto:form.concepto,categoria:form.categoria,monto,moneda:form.moneda,fecha_factura:form.fecha_factura,fecha_vencimiento:isPaid?null:form.fecha_vencimiento||null,estado:isPaid?"pagada":"pendiente",pagado:isPaid?monto:0,notas:form.notas,imagen:form.imagen||null,creado_por:sup.nombre,created_at:new Date().toISOString()};
     setCuentasPagar(prev=>[c,...prev]);
     await dbSaveCuentaPagar(c);
+    logEvent(isPaid?"cuenta_pagar.created_paid":"cuenta_pagar.created","cuentas_pagar",c.id,{proveedor:c.proveedor,concepto:c.concepto,monto:c.monto,moneda:c.moneda,categoria:c.categoria,vencimiento:c.fecha_vencimiento,estado:c.estado},sup);
     // Auto-save proveedor to directory
     if(form.proveedor&&proveedores){
       const existing=(proveedores||[]).find(p=>p.nombre.toLowerCase()===form.proveedor.toLowerCase());
@@ -3916,6 +4383,7 @@ function CuentasPagarModule({cuentasPagar,setCuentasPagar,pagos,setPagos,sup,pro
     const nuevoEstado=pagado>=Number(cp.monto)?"pagada":"parcial";
     setCuentasPagar(prev=>prev.map(x=>x.id===cp.id?Object.assign({},x,{pagado,estado:nuevoEstado}):x));
     await dbUpdateCuentaPagar(cp.id,{pagado,estado:nuevoEstado});
+    logEvent(nuevoEstado==="pagada"?"cuenta_pagar.paid":"cuenta_pagar.partial_paid","cuentas_pagar",cp.id,{proveedor:cp.proveedor,concepto:cp.concepto,monto,moneda:cp.moneda||"HTG",pago_id:pago.id,metodo:pago.metodo,total_cuenta:cp.monto,total_pagado:pagado,saldo:Math.max(0,Number(cp.monto)-pagado)},sup);
     setPayId(null);setPayForm({monto:"",fecha:new Date().toISOString().split("T")[0],metodo:"transferencia"});
   };
 
@@ -4004,7 +4472,7 @@ function CuentasPagarModule({cuentasPagar,setCuentasPagar,pagos,setPagos,sup,pro
       {/* Proveedor list */}
       {(proveedores||[]).length===0?<div style={{textAlign:"center",padding:16,color:B.textLight,fontSize:13}}>Sin proveedores registrados</div>:
       (proveedores||[]).map(p=>{
-        const catLabel=(CATEGORIAS_GASTO.find(c=>c.v===p.categoria)||{l:p.categoria||"—"}).l;
+        const catLabel=labelCategoria(p.categoria);
         const isEditing=editProvId===p.id;
         const gastoCount=cuentasPagar.filter(c=>(c.proveedor||"").toLowerCase()===p.nombre.toLowerCase()).length;
         return(<div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid "+B.border}}>
@@ -4045,13 +4513,13 @@ function CuentasPagarModule({cuentasPagar,setCuentasPagar,pagos,setPagos,sup,pro
     {modo&&<Card ch={<div style={{display:"flex",flexDirection:"column",gap:12}}>
       <div style={{color:B.navy,fontSize:16,fontWeight:800}}>Nuevo Gasto / Cuenta por Pagar</div>
       <S label="Categoría" value={form.categoria} onChange={set("categoria")} options={CATEGORIAS_GASTO}/>
-      <F label="Concepto" value={form.concepto} onChange={set("concepto")} placeholder="Ej: Transporte de rollos, Factura eléctrica..."/>
+      <F label="Concepto" value={form.concepto} onChange={set("concepto")} placeholder="Ej: Transporte de tubos, Factura eléctrica..."/>
       <div>
         <div style={{color:B.textLight,fontSize:12,fontWeight:700,letterSpacing:.6,textTransform:"uppercase",marginBottom:6}}>Proveedor</div>
         <input list="proveedores-list" value={form.proveedor} onChange={e=>onProveedorChange(e.target.value)} placeholder="Nombre del proveedor" style={{width:"100%",padding:"12px 14px",borderRadius:12,border:"1.5px solid "+B.border,fontSize:14,fontWeight:500,background:"#fff",outline:"none",boxSizing:"border-box"}}/>
         <datalist id="proveedores-list">{(proveedores||[]).map(p=><option key={p.id} value={p.nombre}/>)}</datalist>
         {(proveedores||[]).length>0&&!form.proveedor&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:6}}>
-          {(proveedores||[]).slice(0,10).map(p=>{const catLabel=(CATEGORIAS_GASTO.find(c=>c.v===p.categoria)||{l:""}).l;return<button key={p.id} onClick={()=>onProveedorChange(p.nombre)} style={{background:B.bg,border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,color:B.textMid,fontWeight:600,cursor:"pointer"}}>{p.nombre}{catLabel?" · "+catLabel:""}</button>;})}
+          {(proveedores||[]).slice(0,10).map(p=>{const catLabel=p.categoria?labelCategoria(p.categoria):"";return<button key={p.id} onClick={()=>onProveedorChange(p.nombre)} style={{background:B.bg,border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,color:B.textMid,fontWeight:600,cursor:"pointer"}}>{p.nombre}{catLabel?" · "+catLabel:""}</button>;})}
         </div>}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 100px",gap:10}}>
@@ -4091,7 +4559,7 @@ function CuentasPagarModule({cuentasPagar,setCuentasPagar,pagos,setPagos,sup,pro
         <div>
           <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:2}}>
             <span style={{color:B.navy,fontSize:14,fontWeight:800}}>{cp.proveedor||cp.concepto}</span>
-            {cp.categoria&&<Badge label={(CATEGORIAS_GASTO.find(c=>c.v===cp.categoria)||{l:cp.categoria}).l} color={B.navy}/>}
+            {cp.categoria&&<Badge label={labelCategoria(cp.categoria)} color={B.navy}/>}
           </div>
           {cp.concepto&&cp.proveedor&&<div style={{color:B.textMid,fontSize:13}}>{cp.concepto}</div>}
           <div style={{color:B.textLight,fontSize:11}}>{cp.fecha_factura}{cp.fecha_vencimiento?" → "+cp.fecha_vencimiento:""}</div>
@@ -4122,8 +4590,276 @@ function CuentasPagarModule({cuentasPagar,setCuentasPagar,pagos,setPagos,sup,pro
   </div>);
 }
 
+// ── Tipos de Cambio (Exchange Rates) ─────────────────────────────────────────
+// Admin enters the daily HTG/USD rate (BRH or commercial bank). Used for all
+// dual-currency reports and conversions throughout the app.
+function TiposCambio({tiposCambio,setTiposCambio,sup}){
+  const [modo,setModo]=useState(false);
+  const [form,setForm]=useState({fecha:new Date().toISOString().split("T")[0],htgPorUsd:"",fuente:"BRH",notas:""});
+  const set=k=>v=>setForm(f=>Object.assign({},f,{[k]:v}));
+  const reset=()=>setForm({fecha:new Date().toISOString().split("T")[0],htgPorUsd:"",fuente:"BRH",notas:""});
+
+  const guardar=()=>{
+    if(!form.htgPorUsd||Number(form.htgPorUsd)<=0)return;
+    const tc={id:Date.now()+"_tc",fecha:form.fecha,htgPorUsd:Number(form.htgPorUsd),fuente:form.fuente,notas:form.notas,creadoPor:sup.nombre};
+    setTiposCambio(prev=>{
+      // Replace any existing rate for the same date (one rate per date).
+      const filtered=prev.filter(t=>t.fecha!==tc.fecha);
+      return [tc,...filtered].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+    });
+    qSaveTipoCambio(tc);
+    logEvent("tipo_cambio.set","tipos_cambio",tc.id,{fecha:tc.fecha,htg_por_usd:tc.htgPorUsd,fuente:tc.fuente},sup);
+    reset();setModo(false);
+  };
+  const eliminar=(tc)=>{
+    if(!confirmDelete(sup,"¿Eliminar este tipo de cambio?"))return;
+    setTiposCambio(prev=>prev.filter(t=>t.id!==tc.id));
+    dbDeleteTipoCambio(tc.id);
+    dbLogAudit("delete","tipos_cambio",tc.id,sup.nombre);
+  };
+
+  const lastRate=tiposCambio[0];
+  const sorted=tiposCambio.slice().sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+
+  return(<div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div>
+        <h2 style={{color:B.textDark,fontSize:18,fontWeight:800,margin:"0 0 2px"}}>💱 Tipos de Cambio</h2>
+        <p style={{color:B.textLight,fontSize:13,margin:0}}>HTG / USD · {tiposCambio.length} registro{tiposCambio.length===1?"":"s"}</p>
+      </div>
+      <Btn ch={modo?"✕ Cancelar":"+ Nuevo"} fn={()=>{if(modo){setModo(false);reset();}else{reset();setModo(true);}}} small color={modo?B.red:undefined}/>
+    </div>
+
+    {/* Latest rate card */}
+    {lastRate&&!modo&&<Card accent={B.teal} ch={<div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div>
+          <div style={{color:B.textLight,fontSize:11,fontWeight:700,letterSpacing:.6,textTransform:"uppercase"}}>Tasa actual</div>
+          <div style={{color:B.textDark,fontSize:28,fontWeight:800,marginTop:4}}>HTG <span style={{color:B.teal}}>{Number(lastRate.htgPorUsd).toFixed(2)}</span></div>
+          <div style={{color:B.textLight,fontSize:11,fontWeight:600,marginTop:2}}>1 USD = {Number(lastRate.htgPorUsd).toFixed(2)} HTG · {lastRate.fecha}{lastRate.fuente?" · "+lastRate.fuente:""}</div>
+        </div>
+        <div style={{textAlign:"right",fontSize:11,color:B.textLight}}>
+          <div>1 HTG = US$ {(1/Number(lastRate.htgPorUsd)).toFixed(4)}</div>
+          {lastRate.notas&&<div style={{marginTop:4,fontStyle:"italic"}}>{lastRate.notas}</div>}
+        </div>
+      </div>
+    </div>}/>}
+
+    {/* Add form */}
+    {modo&&<Card accent={B.teal} ch={<div>
+      <div style={{color:B.teal,fontSize:12,fontWeight:800,letterSpacing:1,textTransform:"uppercase",marginBottom:14}}>Nuevo tipo de cambio</div>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <F label="Fecha" value={form.fecha} onChange={set("fecha")} type="date"/>
+          <S label="Fuente" value={form.fuente} onChange={set("fuente")} options={[{v:"BRH",l:"BRH (oficial)"},{v:"banco",l:"Banco comercial"},{v:"manual",l:"Manual"}]}/>
+        </div>
+        <F label="HTG por 1 USD (ej: 132.50)" value={form.htgPorUsd} onChange={set("htgPorUsd")} type="number" placeholder="0.00"/>
+        <F label="Notas (opcional)" value={form.notas} onChange={set("notas")} placeholder="Ej: Tasa promedio del día"/>
+        <div style={{background:B.bg,borderRadius:8,padding:"9px 12px",fontSize:11,color:B.textLight}}>💡 Si ya existe una tasa para esta fecha, se reemplazará. Las conversiones usan la tasa más cercana al día de cada transacción.</div>
+        <Btn ch="✓ Guardar tasa" fn={guardar} color={"linear-gradient(135deg,"+B.teal+","+B.navy+")"} full/>
+      </div>
+    </div>}/>}
+
+    {/* History */}
+    <Card ch={<div>
+      <div style={{color:B.textLight,fontSize:11,fontWeight:700,letterSpacing:.6,textTransform:"uppercase",marginBottom:10}}>Historial</div>
+      {sorted.length===0?<div style={{textAlign:"center",padding:24,color:B.textLight,fontSize:13}}>Aún no hay tipos de cambio. Agrega el primero para habilitar conversiones.</div>:
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+          <thead>
+            <tr style={{background:B.bg}}>
+              <th style={{textAlign:"left",padding:"8px 10px",color:B.textLight,fontSize:11,fontWeight:700}}>Fecha</th>
+              <th style={{textAlign:"right",padding:"8px 10px",color:B.textLight,fontSize:11,fontWeight:700}}>HTG / USD</th>
+              <th style={{textAlign:"left",padding:"8px 10px",color:B.textLight,fontSize:11,fontWeight:700}}>Fuente</th>
+              <th style={{textAlign:"left",padding:"8px 10px",color:B.textLight,fontSize:11,fontWeight:700}}>Notas</th>
+              <th style={{padding:"8px 10px"}}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map(tc=>(<tr key={tc.id} style={{borderTop:"1px solid "+B.border}}>
+              <td style={{padding:"10px",color:B.textDark,fontWeight:600}}>{tc.fecha}</td>
+              <td style={{textAlign:"right",padding:"10px",color:B.teal,fontWeight:800}}>{Number(tc.htgPorUsd).toFixed(2)}</td>
+              <td style={{padding:"10px",color:B.textMid,fontSize:12}}>{tc.fuente||"—"}</td>
+              <td style={{padding:"10px",color:B.textLight,fontSize:11,fontStyle:tc.notas?"italic":"normal"}}>{tc.notas||"—"}</td>
+              <td style={{padding:"6px 10px",textAlign:"right"}}>{isSartori(sup)&&<button onClick={()=>eliminar(tc)} style={{background:"none",border:"1px solid "+B.red+"44",borderRadius:8,padding:"4px 8px",fontSize:11,color:B.red,cursor:"pointer"}}>✕</button>}</td>
+            </tr>))}
+          </tbody>
+        </table>
+      </div>}
+    </div>}/>
+  </div>);
+}
+
+// ── Audit Log Viewer ─────────────────────────────────────────────────────────
+// Browses every event recorded via logEvent(): production runs, material
+// movements, sales, payments, recipe changes, exchange-rate updates, etc.
+// Loads on demand (audit_log can be large) and supports search + filters.
+function AuditLog({sup}){
+  const [events,setEvents]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [buscar,setBuscar]=useState("");
+  const [periodo,setPeriodo]=useState("week"); // today | week | month | all
+  const [tipo,setTipo]=useState("all");
+  const [supFiltro,setSupFiltro]=useState("all");
+  const [limit,setLimit]=useState(500);
+
+  const refresh=React.useCallback(async()=>{
+    setLoading(true);
+    const rows=await dbLoadAudit(limit);
+    setEvents(rows);
+    setLoading(false);
+  },[limit]);
+
+  React.useEffect(()=>{refresh();},[refresh]);
+
+  const filtrarPorPeriodo=(iso)=>{
+    if(periodo==="all"||!iso)return true;
+    const d=new Date(iso),now=new Date();
+    if(periodo==="today")return d.toDateString()===now.toDateString();
+    if(periodo==="week"){const w=new Date(now);w.setDate(w.getDate()-7);return d>=w;}
+    if(periodo==="month"){const m=new Date(now.getFullYear(),now.getMonth(),1);return d>=m;}
+    return true;
+  };
+
+  // Distinct event types and supervisores from the loaded set
+  const tipos=React.useMemo(()=>{
+    const s=new Set();events.forEach(e=>{if(e.event)s.add(e.event);else if(e.action)s.add(e.action);});
+    return ["all",...[...s].sort()];
+  },[events]);
+  const supervisores=React.useMemo(()=>{
+    const s=new Set();events.forEach(e=>{if(e.supervisor)s.add(e.supervisor);});
+    return ["all",...[...s].sort()];
+  },[events]);
+
+  const filtered=events.filter(e=>{
+    if(!filtrarPorPeriodo(e.created_at))return false;
+    if(tipo!=="all"&&(e.event||e.action)!==tipo)return false;
+    if(supFiltro!=="all"&&e.supervisor!==supFiltro)return false;
+    if(buscar){
+      const q=buscar.toLowerCase();
+      const meta=e.meta?JSON.stringify(e.meta).toLowerCase():"";
+      return(e.event||"").toLowerCase().includes(q)||(e.action||"").toLowerCase().includes(q)||(e.table||"").toLowerCase().includes(q)||(e.recordId||"").toLowerCase().includes(q)||(e.supervisor||"").toLowerCase().includes(q)||meta.includes(q);
+    }
+    return true;
+  });
+
+  // Group events by date for visual buckets
+  const grouped=React.useMemo(()=>{
+    const m={};
+    filtered.forEach(e=>{
+      const d=e.created_at?new Date(e.created_at).toISOString().split("T")[0]:"sin fecha";
+      if(!m[d])m[d]=[];m[d].push(e);
+    });
+    return Object.entries(m).sort((a,b)=>b[0].localeCompare(a[0]));
+  },[filtered]);
+
+  const eventColor=(ev)=>{
+    if(!ev)return B.textLight;
+    if(ev.startsWith("factura.paid")||ev.startsWith("cuenta_pagar.paid")||ev.endsWith(".created"))return B.green;
+    if(ev.startsWith("production.")||ev.startsWith("mezcla."))return B.teal;
+    if(ev.startsWith("material."))return "#B45309";
+    if(ev.startsWith("gasto.")||ev.startsWith("nomina."))return B.amber;
+    if(ev.endsWith(".deleted")||ev==="delete")return B.red;
+    if(ev.startsWith("session."))return B.navy;
+    if(ev.startsWith("recycled."))return "#0D9488";
+    if(ev.startsWith("tipo_cambio.")||ev.startsWith("order."))return B.purple;
+    return B.textMid;
+  };
+
+  const summarizeMeta=(e)=>{
+    if(!e.meta||typeof e.meta!=="object")return null;
+    const m=e.meta;
+    const parts=[];
+    if(m.lbs!=null)parts.push(Number(m.lbs).toLocaleString()+" lbs");
+    if(m.cantidad!=null)parts.push(Number(m.cantidad).toLocaleString()+(m.unidad?" "+m.unidad:""));
+    if(m.monto!=null)parts.push((m.moneda||"")+" "+Number(m.monto).toLocaleString());
+    if(m.total!=null&&m.lbs==null)parts.push("total "+Number(m.total).toLocaleString());
+    if(m.numero)parts.push("#"+m.numero);
+    if(m.cliente)parts.push("→ "+m.cliente);
+    if(m.proveedor)parts.push("← "+m.proveedor);
+    if(m.material)parts.push(m.material);
+    if(m.producto)parts.push(m.producto);
+    if(m.maquina)parts.push(m.maquina);
+    if(m.empleado)parts.push("👤 "+m.empleado);
+    if(m.batch)parts.push("Batch "+m.batch);
+    if(m.from&&m.to)parts.push(m.from+" → "+m.to);
+    if(m.htg_por_usd)parts.push("1 USD = "+m.htg_por_usd+" HTG");
+    if(m.fecha)parts.push(m.fecha);
+    return parts.length>0?parts.join(" · "):JSON.stringify(m).slice(0,80);
+  };
+
+  const exportar=()=>{
+    const rows=filtered.map(e=>({
+      Fecha:e.created_at?new Date(e.created_at).toLocaleString("es-DO"):"",
+      Evento:e.event||e.action||"",
+      Tabla:e.table||"",
+      Registro:e.recordId||"",
+      Usuario:e.supervisor||"",
+      Detalles:summarizeMeta(e)||"",
+      Meta:e.meta?JSON.stringify(e.meta):""
+    }));
+    exportToExcel(rows,"auditoria","Auditoría");
+  };
+
+  return(<div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div>
+        <h2 style={{color:B.textDark,fontSize:18,fontWeight:800,margin:"0 0 2px"}}>📜 Auditoría</h2>
+        <p style={{color:B.textLight,fontSize:13,margin:0}}>Registro de eventos del sistema · {filtered.length} de {events.length}</p>
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        <Btn ch="🔄" fn={refresh} small outline color={B.teal}/>
+        <Btn ch="📥 Excel" fn={exportar} small outline color={B.navy}/>
+      </div>
+    </div>
+
+    <SearchBar value={buscar} onChange={setBuscar} placeholder="Buscar evento, usuario, registro..."/>
+
+    <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4,scrollbarWidth:"none"}}>
+      {[["today","Hoy"],["week","7 días"],["month","Mes"],["all","Todos"]].map(([v,l])=>(
+        <button key={v} onClick={()=>setPeriodo(v)} style={{background:periodo===v?B.navy:"transparent",border:"1.5px solid "+(periodo===v?B.navy:B.border),borderRadius:20,padding:"6px 14px",color:periodo===v?"#fff":B.textMid,fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>{l}</button>
+      ))}
+    </div>
+
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <S label="Tipo de evento" value={tipo} onChange={setTipo} options={tipos.map(t=>({v:t,l:t==="all"?"Todos los eventos":t}))}/>
+      <S label="Usuario" value={supFiltro} onChange={setSupFiltro} options={supervisores.map(s=>({v:s,l:s==="all"?"Todos":s}))}/>
+    </div>
+
+    {loading&&<div style={{textAlign:"center",padding:30,color:B.textLight}}>⏳ Cargando eventos...</div>}
+
+    {!loading&&grouped.length===0&&<Card style={{textAlign:"center",padding:32,border:"1.5px dashed "+B.border}} ch={<div style={{color:B.textLight,fontSize:14}}>{events.length===0?"Aún no hay eventos registrados.":"Ningún evento coincide con los filtros."}</div>}/>}
+
+    {!loading&&grouped.map(([fecha,evs])=>(<div key={fecha} style={{display:"flex",flexDirection:"column",gap:6}}>
+      <div style={{position:"sticky",top:0,zIndex:1,background:B.bg,padding:"6px 10px",borderRadius:8,fontSize:11,fontWeight:800,color:B.textLight,letterSpacing:.6,textTransform:"uppercase"}}>{fecha} · {evs.length} evento{evs.length===1?"":"s"}</div>
+      {evs.map(e=>{
+        const ev=e.event||e.action||"event";
+        const c=eventColor(ev);
+        const time=e.created_at?new Date(e.created_at).toLocaleTimeString("es-DO",{hour:"2-digit",minute:"2-digit",second:"2-digit"}):"--:--";
+        const summary=summarizeMeta(e);
+        return(<Card key={e.id} style={{padding:"10px 12px"}} ch={<div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+          <div style={{minWidth:54,color:B.textLight,fontSize:11,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{time}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:2}}>
+              <Badge label={ev} color={c}/>
+              {e.table&&<span style={{color:B.textLight,fontSize:11,fontWeight:600}}>{e.table}</span>}
+              {e.supervisor&&<span style={{background:B.teal+"15",color:B.teal,borderRadius:10,padding:"2px 8px",fontSize:10,fontWeight:700}}>{e.supervisor.split(" ")[0]}</span>}
+            </div>
+            {summary&&<div style={{color:B.textMid,fontSize:12,fontWeight:500,wordBreak:"break-word"}}>{summary}</div>}
+            {e.recordId&&<div style={{color:B.textLight,fontSize:10,fontFamily:"monospace",marginTop:2}}>id: {e.recordId}</div>}
+          </div>
+        </div>}/>);
+      })}
+    </div>))}
+
+    {!loading&&events.length>=limit&&<div style={{textAlign:"center",padding:10}}>
+      <Btn ch={"Cargar más (mostrando "+limit+")"} fn={()=>setLimit(l=>l+500)} outline small color={B.navy}/>
+    </div>}
+  </div>);
+}
+
 // ── Accounting: Resumen Financiero ───────────────────────────────────────────
-function ResumenFinanciero({facturas,gastos,cuentasPagar,pagos,resinaLogs,movs}){
+function ResumenFinanciero({facturas,gastos,cuentasPagar,pagos,resinaLogs,movs,tiposCambio}){
   const [periodo,setPeriodo]=useState("mensual");
   const hoy=new Date();
 
@@ -4135,16 +4871,27 @@ function ResumenFinanciero({facturas,gastos,cuentasPagar,pagos,resinaLogs,movs})
     const m=new Date(hoy.getFullYear(),hoy.getMonth(),1);return d>=m;
   };
 
-  const ingresos=facturas.filter(f=>(f.estado==="pagada"||f.estado==="parcial")&&filtrarPorPeriodo(f.fecha)).reduce((s,f)=>s+Number(f.total||0),0);
+  // Multi-currency: convert everything to USD using closest-date rate. Bank rate set in Tipos de Cambio.
+  const toUSD=(monto,moneda,fecha)=>convertirMoneda(monto,moneda||"HTG","USD",fecha,tiposCambio);
+  const lastRate=findTipoCambio(tiposCambio);
+
+  // Income: facturas honor their own moneda (default HTG, palamo-legacy data tagged as US$)
+  const facturasFil=facturas.filter(f=>(f.estado==="pagada"||f.estado==="parcial")&&filtrarPorPeriodo(f.fecha));
+  const ingresos=facturasFil.reduce((s,f)=>s+toUSD(Number(f.total||0),f.moneda||"US$",f.fecha),0);
+  const ingresosHTG=facturasFil.filter(f=>(f.moneda||"US$")!=="US$").reduce((s,f)=>s+Number(f.total||0),0);
+  const ingresosUSDraw=facturasFil.filter(f=>(f.moneda||"US$")==="US$").reduce((s,f)=>s+Number(f.total||0),0);
+
   // All cuentasPagar (paid + pending) as expenses, plus old gastos for historical data
-  const allExpenses=[...cuentasPagar.map(c=>({categoria:c.categoria||"otros",monto:c.monto,moneda:c.moneda||"HTG",fecha:c.fecha_factura,concepto:c.concepto,proveedor:c.proveedor,estado:c.estado})),...gastos.map(g=>({categoria:g.categoria,monto:g.monto,moneda:g.moneda||"HTG",fecha:g.fecha,concepto:g.descripcion,proveedor:g.proveedor,estado:"pagada"}))];
-  const expUSD=allExpenses.filter(g=>g.moneda==="US$");
+  const allExpenses=[...cuentasPagar.map(c=>({categoria:normalizeCategoria(c.categoria||"otros"),monto:c.monto,moneda:c.moneda||"HTG",fecha:c.fecha_factura,concepto:c.concepto,proveedor:c.proveedor,estado:c.estado})),...gastos.map(g=>({categoria:normalizeCategoria(g.categoria),monto:g.monto,moneda:g.moneda||"HTG",fecha:g.fecha,concepto:g.descripcion,proveedor:g.proveedor,estado:"pagada"}))];
+  const expFil=allExpenses.filter(g=>filtrarPorPeriodo(g.fecha));
+  const expUSD=allExpenses.filter(g=>g.moneda==="US$"||g.moneda==="USD");
   const expHTG=allExpenses.filter(g=>(g.moneda||"HTG")==="HTG");
-  const costoMP=expUSD.filter(g=>g.categoria==="materia_prima"&&filtrarPorPeriodo(g.fecha)).reduce((s,g)=>s+Number(g.monto||0),0);
-  const gastosOp=expUSD.filter(g=>g.categoria!=="materia_prima"&&filtrarPorPeriodo(g.fecha)).reduce((s,g)=>s+Number(g.monto||0),0);
+  // Convert each expense to USD individually (preserves rate-by-date accuracy)
+  const totalGastos=expFil.reduce((s,g)=>s+toUSD(Number(g.monto||0),g.moneda||"HTG",g.fecha),0);
+  const costoMP=expFil.filter(g=>g.categoria==="materia_prima").reduce((s,g)=>s+toUSD(Number(g.monto||0),g.moneda||"HTG",g.fecha),0);
+  const gastosOp=expFil.filter(g=>g.categoria!=="materia_prima").reduce((s,g)=>s+toUSD(Number(g.monto||0),g.moneda||"HTG",g.fecha),0);
   const totalGastosUSD=expUSD.filter(g=>filtrarPorPeriodo(g.fecha)).reduce((s,g)=>s+Number(g.monto||0),0);
   const totalGastosHTG=expHTG.filter(g=>filtrarPorPeriodo(g.fecha)).reduce((s,g)=>s+Number(g.monto||0),0);
-  const totalGastos=totalGastosUSD; // utilidad/margen still computed in USD (palamo legacy); HTG/DOP shown alongside
   const utilidad=ingresos-totalGastos;
   const margen=ingresos>0?((utilidad/ingresos)*100).toFixed(1):0;
 
@@ -4169,14 +4916,15 @@ function ResumenFinanciero({facturas,gastos,cuentasPagar,pagos,resinaLogs,movs})
   const maxMes=Math.max(...meses.map(m=>Math.max(m.ing,m.gas)),1);
 
   return(<div style={{display:"flex",flexDirection:"column",gap:16}}>
-    <div style={{display:"flex",gap:6}}>
+    <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
       {["diario","semanal","mensual","anual"].map(p=><button key={p} onClick={()=>setPeriodo(p)} style={{background:periodo===p?B.navy:"transparent",border:"1.5px solid "+(periodo===p?B.navy:B.border),borderRadius:20,padding:"7px 14px",color:periodo===p?"#fff":B.textMid,fontSize:12,fontWeight:700,cursor:"pointer"}}>{p.charAt(0).toUpperCase()+p.slice(1)}</button>)}
+      {lastRate?<span style={{marginLeft:"auto",background:B.teal+"15",color:B.teal,borderRadius:20,padding:"5px 12px",fontSize:11,fontWeight:700}}>💱 1 USD = {Number(lastRate.htgPorUsd).toFixed(2)} HTG</span>:<span style={{marginLeft:"auto",background:B.amber+"15",color:B.amber,borderRadius:20,padding:"5px 12px",fontSize:11,fontWeight:700}}>⚠️ Sin tipo de cambio</span>}
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-      <Stat label="Ingresos (US$)" value={"US$ "+ingresos.toLocaleString()} color={B.green}/>
-      {totalGastosHTG>0&&<Stat label="Gastos (HTG)" value={"HTG "+totalGastosHTG.toLocaleString()} color={B.red}/>}
-      {totalGastosUSD>0&&<Stat label="Gastos (US$)" value={"US$ "+totalGastosUSD.toLocaleString()} color={B.red}/>}
-      <Stat label="Utilidad (US$)" value={(utilidad>=0?"US$ ":"-US$ ")+Math.abs(utilidad).toLocaleString()} color={utilidad>=0?B.teal:B.red} sub={"Margen: "+margen+"%"}/>
+      <Stat label="Ingresos (USD)" value={"US$ "+ingresos.toLocaleString(undefined,{maximumFractionDigits:0})} color={B.green} sub={ingresosHTG>0?"HTG "+ingresosHTG.toLocaleString(undefined,{maximumFractionDigits:0})+" + US$ "+ingresosUSDraw.toLocaleString(undefined,{maximumFractionDigits:0}):undefined}/>
+      <Stat label="Gastos (USD)" value={"US$ "+totalGastos.toLocaleString(undefined,{maximumFractionDigits:0})} color={B.red} sub={(totalGastosHTG>0||totalGastosUSD>0)?(totalGastosHTG>0?"HTG "+totalGastosHTG.toLocaleString(undefined,{maximumFractionDigits:0}):"")+(totalGastosHTG>0&&totalGastosUSD>0?" + ":"")+(totalGastosUSD>0?"US$ "+totalGastosUSD.toLocaleString(undefined,{maximumFractionDigits:0}):""):undefined}/>
+      <Stat label="Utilidad (USD)" value={(utilidad>=0?"US$ ":"-US$ ")+Math.abs(utilidad).toLocaleString(undefined,{maximumFractionDigits:0})} color={utilidad>=0?B.teal:B.red} sub={"Margen: "+margen+"%"}/>
+      <Stat label="Tipo de cambio" value={lastRate?Number(lastRate.htgPorUsd).toFixed(2):"—"} color={lastRate?B.teal:B.amber} sub={lastRate?(lastRate.fecha+" · "+(lastRate.fuente||"manual")):"Configurar en Cambio"}/>
     </div>
     <Card ch={<div>
       <div style={{color:B.navy,fontSize:14,fontWeight:800,marginBottom:10}}>Costo por Libra</div>
@@ -4231,8 +4979,8 @@ function ResumenFinanciero({facturas,gastos,cuentasPagar,pagos,resinaLogs,movs})
     <Card ch={<div>
       <div style={{color:B.navy,fontSize:14,fontWeight:800,marginBottom:12}}>Desglose de Gastos</div>
       {CATEGORIAS_GASTO.map(cat=>{
-        const amtUSD=expUSD.filter(g=>g.categoria===cat.v&&filtrarPorPeriodo(g.fecha)).reduce((s,g)=>s+Number(g.monto||0),0);
-        const pct=totalGastosUSD>0?((amtUSD/totalGastosUSD)*100).toFixed(0):0;
+        const amtUSD=expFil.filter(g=>g.categoria===cat.v).reduce((s,g)=>s+toUSD(Number(g.monto||0),g.moneda||"HTG",g.fecha),0);
+        const pct=totalGastos>0?((amtUSD/totalGastos)*100).toFixed(0):0;
         return <div key={cat.v} style={{marginBottom:8}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
             <span style={{color:B.textMid,fontSize:12,fontWeight:600}}>{cat.l}</span>
@@ -4308,7 +5056,7 @@ function ResumenFinanciero({facturas,gastos,cuentasPagar,pagos,resinaLogs,movs})
         })()+
         "<h2>Detalle de Gastos ("+periodoLabel+")</h2>"+
         "<table><thead><tr><th>Fecha</th><th>Proveedor</th><th>Concepto</th><th>Categoría</th><th>Monto</th><th>Moneda</th><th>Estado</th></tr></thead><tbody>"+
-        allExpenses.filter(g=>filtrarPorPeriodo(g.fecha)).map(g=>"<tr><td>"+(g.fecha||"—")+"</td><td>"+(g.proveedor||"—")+"</td><td>"+(g.concepto||"—")+"</td><td>"+(CATEGORIAS_GASTO.find(c=>c.v===g.categoria)||{l:g.categoria||"—"}).l+"</td><td>"+Number(g.monto||0).toLocaleString()+"</td><td>"+(g.moneda||"HTG")+"</td><td>"+(g.estado==="pagada"?"✅ Pagado":"⏳ Pendiente")+"</td></tr>").join("")+
+        allExpenses.filter(g=>filtrarPorPeriodo(g.fecha)).map(g=>"<tr><td>"+(g.fecha||"—")+"</td><td>"+(g.proveedor||"—")+"</td><td>"+(g.concepto||"—")+"</td><td>"+labelCategoria(g.categoria)+"</td><td>"+Number(g.monto||0).toLocaleString()+"</td><td>"+(g.moneda||"HTG")+"</td><td>"+(g.estado==="pagada"?"✅ Pagado":"⏳ Pendiente")+"</td></tr>").join("")+
         "</tbody></table>"+
         "<div class='footer'>"+EMPRESA_INFO.nombre+" · "+EMPRESA_INFO.rnc+"<br>Reporte generado automáticamente por el sistema Plastinord Hub</div>"+
         "<div style='text-align:center;margin-top:20px'><button onclick='window.print()' style='background:#1C2540;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer'>Guardar como PDF</button></div>"+
@@ -4415,9 +5163,10 @@ function MaquinariasPanel({regs,setRegs,sup,gastos,setGastos}){
     setRegs(p=>[rec,...p]);qSave(rec);
     // Also send to Contabilidad Gastos
     if(setGastos){
-      const g={id:String(Date.now())+"maq",fecha:gFecha,categoria:"mantenimiento",monto:Number(gCosto),moneda:"HTG",descripcion:"[Máquinas] "+gMaquina+" — "+gDesc,proveedor:"",creado_por:sup.nombre,created_at:new Date().toISOString()};
+      const g={id:String(Date.now())+"maq",fecha:gFecha,categoria:"reparaciones",monto:Number(gCosto),moneda:"HTG",descripcion:"[Máquinas] "+gMaquina+" — "+gDesc,proveedor:"",creado_por:sup.nombre,created_at:new Date().toISOString()};
       setGastos(prev=>[g,...prev]);
       dbSaveGasto(g);
+      logEvent("gasto.machine_repair","gastos",g.id,{maquina:gMaquina,monto:g.monto,moneda:"HTG",descripcion:gDesc},sup);
     }
     setGDesc("");setGCosto("");setShowForm(false);
     setSaved(true);setTimeout(()=>setSaved(false),2000);
@@ -4741,6 +5490,7 @@ function CajaChica({sup,gastos,setGastos}){
       const g={id:String(Date.now())+Math.random(),fecha:m.fecha,categoria:"caja_chica",monto:m.monto,moneda:"HTG",descripcion:"[Caja Chica] "+m.concepto+(m.responsable?" — "+m.responsable:""),proveedor:"",creado_por:sup.nombre,created_at:new Date().toISOString()};
       setGastos(prev=>[g,...prev]);
       await dbSaveGasto(g);
+      logEvent("caja_chica.closed_entry","gastos",g.id,{concepto:m.concepto,monto:m.monto,responsable:m.responsable||null,fecha:m.fecha},sup);
     }
     const cierre={id:String(Date.now()),fecha:hoy,cerrado_por:sup.nombre,entradas:movimientos.filter(m=>m.tipo==="entrada").reduce((s,m)=>s+m.monto,0),salidas:salidasList.reduce((s,m)=>s+m.monto,0),items:salidasList.length,movimientos:[...movimientos]};
     const nextHist=[cierre,...historial];
@@ -5065,6 +5815,7 @@ function Nomina({sup,gastos,setGastos}){
       }
       // Persist full record to Supabase nominas table (requires table to exist)
       try{await dbSaveNomina(record);}catch(dbErr){console.error("dbSaveNomina",dbErr);}
+      logEvent("nomina.processed","nominas",record.id,{periodo:periodoKey,label,total_nomina:totalNomina,total_adicional:totalAdicional,total_otros:totalOtros,grand_total:totalNomina+totalAdicional+totalOtros,empleados_nomina:rowsNomina.length,empleados_adicional:rowsAdicional.length},sup);
       // Send to Gastos
       const gastoEntries=[];
       if(totalNomina>0)gastoEntries.push({id:String(Date.now())+"n",fecha:periodoKey,categoria:"nomina",monto:totalNomina,moneda:"HTG",descripcion:"[Nómina] "+label+" — Principal ("+rowsNomina.length+" empleados)",proveedor:"",creado_por:sup.nombre,created_at:new Date().toISOString()});
@@ -5458,6 +6209,7 @@ function EmpleadosPanel({sup}){
     if(idx>=0)EMPLEADOS.splice(idx,1);
     const nidx=NOMBRES_EMPLEADOS.indexOf(nombre);
     if(nidx>=0)NOMBRES_EMPLEADOS.splice(nidx,1);
+    logEvent("empleado.inactivated","empleados",nombre,{nombre},sup);
     alert("✓ "+nombre+" marcado como inactivo");
     setSelected(null);
   };
@@ -5471,6 +6223,7 @@ function EmpleadosPanel({sup}){
     const extras=(()=>{try{return JSON.parse(localStorage.getItem("plastinord_empleados_extra")||"[]");}catch(e){return[];}})();
     extras.push(emp);
     localStorage.setItem("plastinord_empleados_extra",JSON.stringify(extras));
+    logEvent("empleado.created","empleados",emp.nombre,{nombre:emp.nombre,cargo:emp.cargo,area:emp.area,salario:emp.salario,tipo:emp.tipo,ingreso:emp.ingreso},sup);
     setNewEmp({nombre:"",cargo:"",area:"general",salario:"",tipo:"nomina",ingreso:new Date().toISOString().split("T")[0],ci:""});
     setShowAddEmp(false);
     alert("✓ Empleado "+emp.nombre+" agregado");
@@ -5676,7 +6429,7 @@ function EmpleadosPanel({sup}){
       <F label="Nombre completo" value={newEmp.nombre} onChange={v=>setNewEmp(f=>({...f,nombre:v}))} placeholder="Nombre y apellido"/>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
         <F label="Cargo" value={newEmp.cargo} onChange={v=>setNewEmp(f=>({...f,cargo:v}))} placeholder="Ej: Operador Extrusión"/>
-        <S label="Área" value={newEmp.area} onChange={v=>setNewEmp(f=>({...f,area:v}))} options={[{v:"extrusion",l:"Extrusión"},{v:"impresion",l:"Impresión"},{v:"slitter",l:"Slitter"},{v:"cortadora",l:"Cortadora"},{v:"reciclaje",l:"Reciclaje"},{v:"supervision",l:"Supervisión"},{v:"general",l:"General"}]}/>
+        <S label="Área" value={newEmp.area} onChange={v=>setNewEmp(f=>({...f,area:v}))} options={[{v:"materia_prima",l:"Materia Prima"},{v:"mezcla",l:"Mezcla"},{v:"extrusion",l:"Extrusión"},{v:"producto_final",l:"Producto Final"},{v:"peletizadora",l:"Peletizadora"},{v:"supervision",l:"Supervisión"},{v:"general",l:"General"}]}/>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
         <F label="Salario mensual (HTG)" value={newEmp.salario} onChange={v=>setNewEmp(f=>({...f,salario:v}))} type="number" placeholder="0"/>
@@ -5957,6 +6710,8 @@ function App(){
   const backToModules=()=>{setModulo(null);setVistaModulo(null);};
   // Auto-enter Producción for operators
   useEffect(()=>{if(sup&&sup.rol==="operador"&&!modulo)enterModulo("produccion");},[sup,modulo,enterModulo]);
+  // Track current login globally so logEvent() can attribute events without explicit prop drilling
+  useEffect(()=>{window.__plastinord_currentSup=sup;if(sup)logEvent("session.login","supervisores",sup.codigo,{nombre:sup.nombre,rol:sup.rol},sup);},[sup]);
   const [dbLoading,setDbLoading]=useState(true);
   const [facturas,setFacturas]=useState([]);
   const [cuentasPagar,setCuentasPagar]=useState([]);
@@ -5965,9 +6720,11 @@ function App(){
   const [lotes,setLotes]=useState([]);
   const [clientes,setClientes]=useState([]);
   const [proveedores,setProveedores]=useState([]);
+  const [recetas,setRecetas]=useState([]);
+  const [tiposCambio,setTiposCambio]=useState([]);
 
   const refreshAllData=useCallback(()=>{
-    return Promise.all([dbLoad(),dbLoadOrders(),dbLoadResina(),dbLoadProductos(),dbLoadMovimientos(),dbLoadLotes(),dbLoadClientes(),dbLoadProveedores()]).then(([r,o,res,pt,mvs,lt,cl,pv])=>{
+    return Promise.all([dbLoad(),dbLoadOrders(),dbLoadResina(),dbLoadProductos(),dbLoadMovimientos(),dbLoadLotes(),dbLoadClientes(),dbLoadProveedores(),dbLoadRecetas(),dbLoadTiposCambio()]).then(([r,o,res,pt,mvs,lt,cl,pv,rc,tc])=>{
       // Merge: keep locally-added records (saved <45s ago) that aren't yet in the DB response
       const cutoff=Date.now()-45000;
       const mergeFn=(dbData)=>{const ids=new Set(dbData.map(x=>String(x.id)));return prev=>{const pending=prev.filter(x=>x.id>cutoff&&!ids.has(String(x.id)));return pending.length?[...pending,...dbData]:dbData;};};
@@ -5976,7 +6733,7 @@ function App(){
       setResinaLogs(mergeFn(res));
       setProductoLogs(mergeFn(pt));
       setMovs(mergeFn(mvs));
-      setLotes(lt||[]);setClientes(cl||[]);setProveedores(pv||[]);
+      setLotes(lt||[]);setClientes(cl||[]);setProveedores(pv||[]);setRecetas(rc||[]);setTiposCambio(tc||[]);
       const stock={};
       mvs.forEach(mv=>{
         if(!stock[mv.materialId])stock[mv.materialId]=0;
@@ -6153,6 +6910,7 @@ function App(){
   const NAV_PRODUCCION=[
     {id:"inicio",icon:"📊",label:"Inicio"},
     {id:"registro",icon:"➕",label:"Registrar"},
+    {id:"recetas",icon:"📋",label:"Recetas"},
     {id:"almacen",icon:"📦",label:"Almacén",badge:ordenesActivas||0},
     {id:"materiaprima",icon:"🧪",label:"M. Prima",badge:alts||0},
     {id:"maquinas",icon:"🔧",label:"Máquinas"},
@@ -6162,6 +6920,8 @@ function App(){
     {id:"facturacion",icon:"🧾",label:"Facturación"},
     {id:"gastos",icon:"💳",label:"Gastos"},
     {id:"cajachica",icon:"💼",label:"Caja Chica"},
+    {id:"cambio",icon:"💱",label:"Cambio"},
+    {id:"auditoria",icon:"📜",label:"Auditoría"},
   ];
   const NAV_EQUIPOS=[
     {id:"rendimiento",icon:"📈",label:"Rendimiento"},
@@ -6221,13 +6981,16 @@ function App(){
       {/* Module: Producción */}
       {!dbLoading&&modulo==="produccion"&&vistaModulo==="inicio"&&isOp&&<PanelProduccion regs={regs} setRegs={setRegs} ordenes={ordenes} sup={sup} setVista={setVistaModulo}/>}
       {!dbLoading&&modulo==="produccion"&&vistaModulo==="inicio"&&!isOp&&<Dashboard regs={regs} mat={mat} ordenes={ordenes} resinaLogs={resinaLogs} setVista={setVistaModulo} productoLogs={productoLogs}/>}
-      {!dbLoading&&modulo==="produccion"&&vistaModulo==="registro"&&<ProduccionSimple sup={sup} regs={regs} setRegs={setRegs} resinaLogs={resinaLogs} setResinaLogs={setResinaLogs} mat={mat} setMat={setMat} movs={movs} setMovs={setMovs} ordenes={ordenes} setOrdenes={setOrdenes} productoLogs={productoLogs} setProductoLogs={setProductoLogs} lotes={lotes} setLotes={setLotes}/>}
+      {!dbLoading&&modulo==="produccion"&&vistaModulo==="registro"&&<ProduccionSimple sup={sup} regs={regs} setRegs={setRegs} resinaLogs={resinaLogs} setResinaLogs={setResinaLogs} mat={mat} setMat={setMat} movs={movs} setMovs={setMovs} ordenes={ordenes} setOrdenes={setOrdenes} productoLogs={productoLogs} setProductoLogs={setProductoLogs} lotes={lotes} setLotes={setLotes} recetas={recetas}/>}
+      {!dbLoading&&modulo==="produccion"&&vistaModulo==="recetas"&&<Recetas recetas={recetas} setRecetas={setRecetas} mat={mat} sup={sup}/>}
       {!dbLoading&&modulo==="produccion"&&vistaModulo==="almacen"&&<AlmacenUnificado logs={productoLogs} setLogs={setProductoLogs} ordenes={ordenes} setOrdenes={setOrdenes} productoLogs={productoLogs} setProductoLogs={setProductoLogs} sup={sup} mat={mat} setMat={setMat} movs={movs} setMovs={setMovs} regs={regs} clientes={clientes} setClientes={setClientes} facturas={facturas} setFacturas={setFacturas} pagos={pagos} setPagos={setPagos}/>}
       {!dbLoading&&modulo==="produccion"&&vistaModulo==="materiaprima"&&<Inventario mat={mat} setMat={setMat} movs={movs} setMovs={setMovs} sup={sup}/>}
       {!dbLoading&&modulo==="produccion"&&vistaModulo==="maquinas"&&<MaquinariasPanel regs={regs} setRegs={setRegs} sup={sup} gastos={gastos} setGastos={setGastos}/>}
 
       {/* Module: Contabilidad */}
-      {!dbLoading&&modulo==="contabilidad"&&vistaModulo==="inicio"&&<ResumenFinanciero facturas={facturas} gastos={gastos} cuentasPagar={cuentasPagar} pagos={pagos} resinaLogs={resinaLogs} movs={movs}/>}
+      {!dbLoading&&modulo==="contabilidad"&&vistaModulo==="inicio"&&<ResumenFinanciero facturas={facturas} gastos={gastos} cuentasPagar={cuentasPagar} pagos={pagos} resinaLogs={resinaLogs} movs={movs} tiposCambio={tiposCambio}/>}
+      {!dbLoading&&modulo==="contabilidad"&&vistaModulo==="cambio"&&<TiposCambio tiposCambio={tiposCambio} setTiposCambio={setTiposCambio} sup={sup}/>}
+      {!dbLoading&&modulo==="contabilidad"&&vistaModulo==="auditoria"&&<AuditLog sup={sup}/>}
       {!dbLoading&&modulo==="contabilidad"&&vistaModulo==="facturacion"&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
         <Facturacion facturas={facturas} setFacturas={setFacturas} productoLogs={productoLogs} setProductoLogs={setProductoLogs} ordenes={ordenes} sup={sup} pagos={pagos} setPagos={setPagos} clientes={clientes} setClientes={setClientes}/>
         <CuentasCobrar facturas={facturas} setFacturas={setFacturas} pagos={pagos} setPagos={setPagos} sup={sup}/>

@@ -58,14 +58,21 @@ create table if not exists public.resina_batches (
   fecha date,
   ldpe numeric default 0,
   mlldpe numeric default 0,
+  reciclado numeric default 0,            -- Material Reciclado PVC (powder from peletizadora)
   total numeric default 0,
   lote text,
+  receta_id text,                         -- FK to public.recetas if a recipe was applied
+  receta_nombre text,
   supervisor_nombre text,
   empleado text,
   turno text,
   notas text,
   created_at timestamptz default now()
 );
+-- Backfill columns when re-running the schema on an existing database
+alter table public.resina_batches add column if not exists reciclado numeric default 0;
+alter table public.resina_batches add column if not exists receta_id text;
+alter table public.resina_batches add column if not exists receta_nombre text;
 create index if not exists resina_batches_created_at_idx on public.resina_batches (created_at desc);
 
 -- =============================================================================
@@ -274,18 +281,64 @@ create table if not exists public.proveedores (
 create index if not exists proveedores_nombre_idx on public.proveedores (nombre);
 
 -- =============================================================================
--- 15. audit_log — change tracking
+-- 15. recetas — production formulas / recipes
 -- =============================================================================
+-- A recipe defines the materials and quantities required to produce a given
+-- product. It is referenced by production orders and by the Mezcla stage
+-- (Aplicar receta button auto-fills materials).
+create table if not exists public.recetas (
+  id text primary key,
+  nombre text,                  -- "Presión SDR-26 1\""
+  tipo text,                    -- "Presión SDR-26" | "Presión SCH-40" | "Drenaje" | "Eléctrico" | "Otro"
+  diametro text,                -- "1\"" / "2\"" / null if size-agnostic
+  descripcion text,
+  activa boolean default true,
+  materiales text,              -- JSON: [{material_id, material_nombre, cantidad, unidad, costo_unitario?}]
+  created_at timestamptz default now()
+);
+create index if not exists recetas_created_at_idx on public.recetas (created_at desc);
+create index if not exists recetas_activa_idx on public.recetas (activa);
+
+-- =============================================================================
+-- 16. tipos_cambio — daily exchange rates (HTG per USD)
+-- =============================================================================
+-- Admin enters the bank-published rate (BRH or commercial bank) each day.
+-- All conversions look up the closest historical rate for the transaction date,
+-- so reports stay accurate even when rates fluctuate.
+create table if not exists public.tipos_cambio (
+  id text primary key,
+  fecha date,                  -- the date this rate is effective for
+  htg_por_usd numeric,         -- e.g. 132.50 means 1 USD = 132.50 HTG
+  fuente text,                 -- 'BRH' | 'banco' | 'manual'
+  notas text,
+  creado_por text,
+  created_at timestamptz default now()
+);
+create index if not exists tipos_cambio_fecha_idx on public.tipos_cambio (fecha desc);
+
+-- =============================================================================
+-- 17. audit_log — event-based transaction record
+-- =============================================================================
+-- Every meaningful action writes an event row here: production runs, material
+-- issues, payments, factura updates, exchange-rate changes, etc. This becomes
+-- the single audit trail for debugging, analytics and (later) accounting JE
+-- reconciliation.
 create table if not exists public.audit_log (
   id text primary key,
-  action text,                  -- 'create' | 'update' | 'delete'
+  action text,                  -- 'create' | 'update' | 'delete' (legacy field, still populated)
+  event_type text,              -- domain event, e.g. 'mezcla.confirmed', 'factura.paid', 'material.issued'
   table_name text,
   record_id text,
   supervisor text,
+  meta text,                    -- JSON-stringified contextual data (amount, lbs, before/after, etc.)
   created_at timestamptz default now()
 );
+-- Backfill columns when re-running the schema on an existing database
+alter table public.audit_log add column if not exists event_type text;
+alter table public.audit_log add column if not exists meta text;
 create index if not exists audit_log_created_at_idx on public.audit_log (created_at desc);
 create index if not exists audit_log_table_idx on public.audit_log (table_name);
+create index if not exists audit_log_event_idx on public.audit_log (event_type);
 
 -- =============================================================================
 -- Row Level Security: enable on every table, add permissive policies for anon
@@ -296,7 +349,7 @@ begin
   for t in select unnest(array[
     'registros','resina_batches','ordenes','producto_terminado','inventario_movimientos',
     'facturas','factura_items','cuentas_pagar','gastos','pagos',
-    'nominas','lotes','clientes','proveedores','audit_log'
+    'nominas','lotes','clientes','proveedores','recetas','tipos_cambio','audit_log'
   ]) loop
     execute format('alter table public.%I enable row level security;', t);
     execute format('drop policy if exists "anon_all_%s" on public.%I;', t, t);
