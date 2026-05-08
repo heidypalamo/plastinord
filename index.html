@@ -115,22 +115,33 @@ const MATERIALES_INIT=[
 const MAQUINAS={
   materia_prima:["Almacén"],
   mezcla:["MEZ-1"],
-  extrusion:["EXT-1","EXT-2"],
-  producto_final:["EMP-1"],
-  peletizadora:["PEL-1","CRUSH-1"],
-  maquina:["MEZ-1","EXT-1","EXT-2","EMP-1","PEL-1","CRUSH-1"]
+  extrusion:["TUB-M1","TUB-M2","TUB-M3"],
+  producto_final:["UNI-M1","UNI-M2"],
+  peletizadora:["MOL-M1","POL-P1"],
+  maquina:["MEZ-1","TUB-M1","TUB-M2","TUB-M3","UNI-M1","UNI-M2","MOL-M1","POL-P1"]
 };
 // Production flow stages — Plastinord PVC pipe: Materia Prima → Mezcla (opcional) → Extrusión → Producto Final
 // + Peletizadora (side flow: desperdicio → polvo reciclado → reusado en Mezcla)
 const ETAPAS=["materia_prima","mezcla","extrusion","producto_final","peletizadora","maquina"];
-const ETIQUETAS={materia_prima:"Materia Prima",mezcla:"Mezcla",extrusion:"Extrusión",producto_final:"Producto Final",peletizadora:"Peletizadora",maquina:"Máquina"};
+const ETIQUETAS={materia_prima:"Materia Prima",mezcla:"Mezcla",extrusion:"Extrusión",producto_final:"Producto Final",peletizadora:"Molinos / Polvo",maquina:"Máquina"};
 const ICONOS={materia_prima:"📦",mezcla:"🧪",extrusion:"⚙️",producto_final:"✓",peletizadora:"🔄",maquina:"🔧"};
 const CE={materia_prima:"#B45309",mezcla:"#7C3AED",extrusion:B.teal,producto_final:B.green,peletizadora:"#0D9488",maquina:"#6B7280"};
 const MAQUINA_TODAS=[...new Set(Object.values(MAQUINAS).flat())].sort();
 const MOTIVOS_PARADA=["Mantenimiento preventivo","Falla mecánica","Falla eléctrica","Cambio de pieza","Ajuste/Calibración","Otro"];
 
 // Materia Prima catalog (for the registro entry stage). "Material Reciclado PVC" comes from the Peletizadora.
-const MATERIAS_PRIMAS=["Compuesto PVC pre-mezclado","LDPE","MLLDPE","Material Reciclado PVC","Estabilizador","Pigmento","Otro"];
+const MATERIAS_PRIMAS=["Compuesto PVC pre-mezclado","Material Reciclado PVC","Carbonato de Calcio","Estabilizador","Pigmento","Otro"];
+
+// Producto Terminado catalog — daily production sheet (Type / Size / Spec)
+const PRODUCTOS_CATALOG=[
+  {tipo:"Pressure Pipe",tamano:"1/2\"",spec:"PRESS"},
+  {tipo:"Pressure Pipe",tamano:"3/4\"",spec:"SCH-40"},
+  {tipo:"Pressure Pipe",tamano:"1\"",spec:"PRESS"},
+  {tipo:"Pressure Pipe 19 P",tamano:"2\"",spec:"SCH 40"},
+  {tipo:"Semi-pressure x 19 SP",tamano:"2\"",spec:"SEM PRESS"},
+  {tipo:"Drainage Pipe x 10 P DR",tamano:"2\"",spec:"SDR"}
+];
+const productoCatalogKey=(p)=>p.tipo+" "+p.tamano+" "+p.spec;
 
 // PVC formulas / recipes used in extrusion runs
 const FORMULAS_PVC=[
@@ -1191,7 +1202,7 @@ function Login({onLogin,onBack}){
         <div style={{display:"inline-block",background:"rgba(255,255,255,.15)",borderRadius:16,padding:"12px 16px",backdropFilter:"blur(8px)"}}>
           <img src={LOGO_IMG} alt="Plastinord Hub" style={{width:48,height:48,objectFit:"contain"}}/>
         </div>
-        <div style={{color:"rgba(255,255,255,.5)",fontSize:11,fontWeight:600,marginTop:8,letterSpacing:1}}>v4.0</div>
+        <div style={{color:"rgba(255,255,255,.5)",fontSize:11,fontWeight:600,marginTop:8,letterSpacing:1}}>v5.1</div>
       </div>
       <div style={{background:"rgba(255,255,255,.93)",borderRadius:20,padding:24,boxShadow:"0 20px 60px rgba(0,0,0,.4)",backdropFilter:"blur(12px)"}}>
         <div style={{color:B.textLight,fontSize:12,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",marginBottom:8}}>Código</div>
@@ -2237,6 +2248,45 @@ function ProductoTerminado({logs,setLogs,ordenes,sup,regs,clientes,setClientes,f
   const [form,setForm]=useState(F0p);
   const set=k=>v=>setForm(f=>Object.assign({},f,{[k]:v}));
 
+  // ── Daily Production grid (Shift 1 / Shift 2) ──
+  const [prodFecha,setProdFecha]=useState(new Date().toISOString().split("T")[0]);
+  const [prodRows,setProdRows]=useState(()=>PRODUCTOS_CATALOG.map(p=>({...p,beg:"",s1:"",s2:""})));
+  // Auto-fill Beginning Stock from current almacén inventory (uds entradas - salidas) for each product key
+  React.useEffect(()=>{
+    if(modo!=="produccion")return;
+    setProdRows(prev=>prev.map(r=>{
+      const key=productoCatalogKey(r);
+      const stock=(logs||[]).filter(l=>l.producto===key&&l.unidad==="uds").reduce((s,l)=>s+(l.tipo==="entrada"?Number(l.cantidad)||0:-(Number(l.cantidad)||0)),0);
+      return{...r,beg:r.beg===""?String(Math.max(0,stock)):r.beg};
+    }));
+  },[modo]);
+  const setProdRow=(i,k,v)=>setProdRows(prev=>{const a=[...prev];a[i]={...a[i],[k]:v};return a;});
+  const prodRowTotal=(r)=>(Number(r.s1)||0)+(Number(r.s2)||0);
+  const saveProduccion=()=>{
+    const toSave=prodRows.filter(r=>prodRowTotal(r)>0);
+    if(toSave.length===0)return;
+    const newEntries=[];
+    toSave.forEach(r=>{
+      const key=productoCatalogKey(r);
+      const s1=Number(r.s1)||0,s2=Number(r.s2)||0;
+      if(s1>0){
+        const e={id:Date.now()+Math.random(),fecha:prodFecha,producto:key,cantidad:s1,unidad:"uds",tipo:"entrada",destino:"",ordenId:"",turno:"Shift 1",notas:"Producción diaria · S1 · Beg: "+(r.beg||0),supervisor:sup.nombre};
+        newEntries.push(e);qSaveProducto(e);
+      }
+      if(s2>0){
+        const e={id:Date.now()+Math.random()+1,fecha:prodFecha,producto:key,cantidad:s2,unidad:"uds",tipo:"entrada",destino:"",ordenId:"",turno:"Shift 2",notas:"Producción diaria · S2 · Beg: "+(r.beg||0),supervisor:sup.nombre};
+        newEntries.push(e);qSaveProducto(e);
+      }
+    });
+    if(newEntries.length>0){
+      setLogs(p=>[...newEntries,...p]);
+      setSaved(true);setTimeout(()=>setSaved(false),2000);
+    }
+    // Reset shifts; keep beg auto-refresh on next open
+    setProdRows(PRODUCTOS_CATALOG.map(p=>({...p,beg:"",s1:"",s2:""})));
+    setModo(false);
+  };
+
   // Summary per product: total produced, total shipped, in warehouse, lbs, order completion
   // Summary per product — uses extrusión registros for lbs produced, producto_terminado for uds/rollos
   const resumen=React.useMemo(()=>{
@@ -2286,61 +2336,6 @@ function ProductoTerminado({logs,setLogs,ordenes,sup,regs,clientes,setClientes,f
   };
 
   const del=id=>{dbLogAudit("delete","producto_terminado",id,sup.nombre);setLogs(p=>p.filter(x=>x.id!==id));dbDeleteProducto(id);};
-
-  // Exportación
-  const disponibles=resumen.filter(p=>p.almacen>0||p.lbsDisp>0);
-  const [expForm,setExpForm]=useState({fecha:new Date().toISOString().split("T")[0],numExportacion:"",cliente:"",items:[]});
-  const initExport=()=>{
-    setExpForm({fecha:new Date().toISOString().split("T")[0],numExportacion:"",cliente:"",items:disponibles.map(p=>({producto:p.producto,disponible:p.lbsDisp>0?p.lbsDisp:p.almacen,unidad:p.lbsDisp>0?"lbs":"uds",cantidad:"",incluir:false}))});
-    setModo("exportacion");
-  };
-  const toggleExpItem=(i)=>setExpForm(f=>{const items=[...f.items];items[i]={...items[i],incluir:!items[i].incluir};return{...f,items};});
-  const setExpItem=(i,k,v)=>setExpForm(f=>{const items=[...f.items];items[i]={...items[i],[k]:v};return{...f,items};});
-  const expItems=expForm.items.filter(it=>it.incluir&&Number(it.cantidad)>0);
-
-  const saveExportacion=async()=>{
-    try{
-      if(!expForm.numExportacion){alert("Ingrese el número de exportación");return;}
-      if(!expForm.cliente){alert("Ingrese el cliente");return;}
-      if(expItems.length===0){alert("Seleccione al menos un producto con cantidad");return;}
-      if(!window.confirm("¿Crear exportación "+expForm.numExportacion+" con "+expItems.length+" productos?"))return;
-      // Create factura
-      const fId=String(Date.now());
-      const y=new Date().getFullYear();
-      const existingFac=(facturas||[]).filter(f=>f.numero&&f.numero.startsWith("FAC-"+y));
-      const mx=existingFac.reduce((max,f)=>{const n=parseInt((f.numero||"").split("-")[2])||0;return n>max?n:max;},0);
-      const facNum="FAC-"+y+"-"+String(mx+1).padStart(3,"0");
-      const factura={id:fId,numero:facNum,fecha:expForm.fecha,cliente:expForm.cliente,ncf:null,orden_id:null,subtotal:0,impuesto:0,total:0,estado:"pendiente",notas:"Exportación #"+expForm.numExportacion,creado_por:sup.nombre,created_at:new Date().toISOString()};
-      const facItems=expItems.map((it,i)=>({id:fId+"-"+i,factura_id:fId,producto:it.producto,cantidad:Number(it.cantidad)||0,precio_unitario:0,subtotal:0}));
-      setFacturas(prev=>[Object.assign({},factura,{_items:facItems}),...prev]);
-      await dbSaveFactura(factura);
-      for(const item of facItems){await dbSaveFacturaItem(item);}
-      // Auto-save client
-      if(expForm.cliente){
-        const existing=(clientes||[]).find(c=>c.nombre&&c.nombre.toLowerCase()===expForm.cliente.toLowerCase());
-        if(!existing){
-          const cl={id:String(Date.now()),nombre:expForm.cliente,created_at:new Date().toISOString()};
-          setClientes(prev=>[cl,...prev]);
-          dbSaveCliente(cl);
-        }
-      }
-      // Deduct from almacén
-      for(const it of expItems){
-        const qty=Number(it.cantidad)||0;
-        if(qty>0){
-          const salida={id:Date.now()+Math.random(),fecha:expForm.fecha,producto:it.producto,cantidad:qty,unidad:it.unidad,tipo:"salida",destino:expForm.cliente,ordenId:"",notas:"Exportación #"+expForm.numExportacion,supervisor:sup.nombre};
-          setLogs(p=>[salida,...p]);
-          await qSaveProducto(salida);
-        }
-      }
-      setSaved(true);setTimeout(()=>setSaved(false),3000);
-      setModo(false);
-      alert("✓ Exportación #"+expForm.numExportacion+" creada — Factura "+facNum+" enviada a Contabilidad");
-    }catch(err){
-      console.error("saveExportacion error:",err);
-      alert("Error al crear exportación: "+err.message);
-    }
-  };
 
   const prodFil=(filProd==="all"?logs:logs.filter(l=>l.producto===filProd)).filter(l=>{
     if(fechaAlm&&l.fecha!==fechaAlm)return false;
@@ -2443,53 +2438,65 @@ function ProductoTerminado({logs,setLogs,ordenes,sup,regs,clientes,setClientes,f
     {/* Operations section */}
     <div style={{color:B.textLight,fontSize:12,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",marginTop:4}}>Operaciones</div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+      <button onClick={()=>setModo(modo==="produccion"?false:"produccion")} style={{background:modo==="produccion"?B.teal:"#fff",border:"2px solid "+(modo==="produccion"?B.teal:B.border),borderRadius:14,padding:"13px 6px",cursor:"pointer",textAlign:"center"}}>
+        <div style={{color:modo==="produccion"?"#fff":B.textDark,fontSize:12,fontWeight:800}}>📋 Producción</div>
+        <div style={{color:modo==="produccion"?"rgba(255,255,255,.8)":B.textLight,fontSize:10}}>Turnos · S1/S2</div>
+      </button>
       <button onClick={()=>setModo(modo==="entrada"?false:"entrada")} style={{background:modo==="entrada"?B.green:"#fff",border:"2px solid "+(modo==="entrada"?B.green:B.border),borderRadius:14,padding:"13px 6px",cursor:"pointer",textAlign:"center"}}>
         <div style={{color:modo==="entrada"?"#fff":B.textDark,fontSize:12,fontWeight:800}}>📥 Entrada</div>
-        <div style={{color:modo==="entrada"?"rgba(255,255,255,.8)":B.textLight,fontSize:10}}>Producción</div>
+        <div style={{color:modo==="entrada"?"rgba(255,255,255,.8)":B.textLight,fontSize:10}}>Manual</div>
       </button>
       <button onClick={()=>setModo(modo==="compra"?false:"compra")} style={{background:modo==="compra"?B.purple:"#fff",border:"2px solid "+(modo==="compra"?B.purple:B.border),borderRadius:14,padding:"13px 6px",cursor:"pointer",textAlign:"center"}}>
         <div style={{color:modo==="compra"?"#fff":B.textDark,fontSize:12,fontWeight:800}}>🛒 Compra</div>
         <div style={{color:modo==="compra"?"rgba(255,255,255,.8)":B.textLight,fontSize:10}}>Proveedor ext.</div>
       </button>
-      <button onClick={()=>{if(modo==="exportacion")setModo(false);else initExport();}} style={{background:modo==="exportacion"?B.navy:"#fff",border:"2px solid "+(modo==="exportacion"?B.navy:B.border),borderRadius:14,padding:"13px 6px",cursor:"pointer",textAlign:"center"}}>
-        <div style={{color:modo==="exportacion"?"#fff":B.textDark,fontSize:12,fontWeight:800}}>🚢 Exportación</div>
-        <div style={{color:modo==="exportacion"?"rgba(255,255,255,.8)":B.textLight,fontSize:10}}>{disponibles.length} productos</div>
-      </button>
     </div>
 
-    {/* Exportación form */}
-    {modo==="exportacion"&&<div style={{animation:"slideDown .2s ease"}}><Card accent={B.navy} ch={<div style={{display:"flex",flexDirection:"column",gap:12}}>
+    {/* Producción del Día — daily production grid */}
+    {modo==="produccion"&&<div style={{animation:"slideDown .2s ease"}}><Card accent={B.teal} ch={<div style={{display:"flex",flexDirection:"column",gap:12}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div style={{color:B.textDark,fontSize:15,fontWeight:800}}>Nueva Exportación</div>
+        <div style={{color:B.textDark,fontSize:15,fontWeight:800}}>Producción del Día</div>
         <button onClick={()=>setModo(false)} style={{background:"none",border:"none",color:B.textLight,fontSize:18,cursor:"pointer"}}>✕</button>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <F label="No. Exportación" value={expForm.numExportacion} onChange={v=>setExpForm(f=>({...f,numExportacion:v}))} placeholder="EXP-001"/>
-        <F label="Fecha" value={expForm.fecha} onChange={v=>setExpForm(f=>({...f,fecha:v}))} type="date"/>
+      <F label="Fecha" value={prodFecha} onChange={setProdFecha} type="date"/>
+      <div style={{fontSize:11,color:B.textLight,fontWeight:700,textTransform:"uppercase",letterSpacing:.6,marginTop:4}}>Productos</div>
+      <div style={{overflowX:"auto",margin:"0 -4px"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:560}}>
+          <thead>
+            <tr style={{background:B.navy,color:"#fff"}}>
+              <th style={{padding:"8px 6px",textAlign:"left",fontWeight:700,fontSize:11}}>Tipo</th>
+              <th style={{padding:"8px 6px",textAlign:"left",fontWeight:700,fontSize:11}}>Tam.</th>
+              <th style={{padding:"8px 6px",textAlign:"left",fontWeight:700,fontSize:11}}>Spec</th>
+              <th style={{padding:"8px 4px",textAlign:"center",fontWeight:700,fontSize:11}}>Beg</th>
+              <th style={{padding:"8px 4px",textAlign:"center",fontWeight:700,fontSize:11}}>S1</th>
+              <th style={{padding:"8px 4px",textAlign:"center",fontWeight:700,fontSize:11}}>S2</th>
+              <th style={{padding:"8px 4px",textAlign:"center",fontWeight:700,fontSize:11}}>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {prodRows.map((r,i)=>{const tot=prodRowTotal(r);return(<tr key={i} style={{background:i%2===0?"#fff":B.bg,borderBottom:"1px solid "+B.border}}>
+              <td style={{padding:"6px 6px",color:B.textDark,fontWeight:700}}>{r.tipo}</td>
+              <td style={{padding:"6px 6px",color:B.textMid}}>{r.tamano}</td>
+              <td style={{padding:"6px 6px",color:B.textMid}}>{r.spec}</td>
+              <td style={{padding:"4px 4px"}}><input type="number" value={r.beg} onChange={e=>setProdRow(i,"beg",e.target.value)} placeholder="0" style={{width:"100%",border:"1px solid "+B.border,borderRadius:6,padding:"5px 6px",fontSize:12,boxSizing:"border-box",textAlign:"right"}}/></td>
+              <td style={{padding:"4px 4px"}}><input type="number" value={r.s1} onChange={e=>setProdRow(i,"s1",e.target.value)} placeholder="0" style={{width:"100%",border:"1px solid "+B.border,borderRadius:6,padding:"5px 6px",fontSize:12,boxSizing:"border-box",textAlign:"right",color:B.teal,fontWeight:700}}/></td>
+              <td style={{padding:"4px 4px"}}><input type="number" value={r.s2} onChange={e=>setProdRow(i,"s2",e.target.value)} placeholder="0" style={{width:"100%",border:"1px solid "+B.border,borderRadius:6,padding:"5px 6px",fontSize:12,boxSizing:"border-box",textAlign:"right",color:"#7C3AED",fontWeight:700}}/></td>
+              <td style={{padding:"6px 4px",textAlign:"right",fontWeight:800,color:tot>0?B.green:B.textLight}}>{tot.toLocaleString()}</td>
+            </tr>);})}
+          </tbody>
+          <tfoot>
+            <tr style={{background:B.bg,borderTop:"2px solid "+B.navy}}>
+              <td colSpan={6} style={{padding:"8px 6px",fontWeight:800,color:B.textDark,fontSize:12,textAlign:"right"}}>Total Día:</td>
+              <td style={{padding:"8px 4px",textAlign:"right",fontWeight:900,color:B.green,fontSize:13}}>{prodRows.reduce((s,r)=>s+prodRowTotal(r),0).toLocaleString()}</td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
-      <F label="Cliente" value={expForm.cliente} onChange={v=>setExpForm(f=>({...f,cliente:v}))} placeholder="Nombre del cliente"/>
-      {(clientes||[]).length>0&&!expForm.cliente&&<div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-        {(clientes||[]).slice(0,8).map(c=><button key={c.id} onClick={()=>setExpForm(f=>({...f,cliente:c.nombre}))} style={{background:B.bg,border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,color:B.textMid,fontWeight:600,cursor:"pointer"}}>{c.nombre}</button>)}
-      </div>}
-      <div style={{fontSize:13,fontWeight:800,color:B.navy,marginTop:4}}>Productos Disponibles</div>
-      <div style={{fontSize:11,color:B.textLight}}>Selecciona los productos, ingresa cantidad y precio unitario (US$)</div>
-      {expForm.items.map((it,i)=><div key={it.producto} style={{background:it.incluir?B.teal+"08":"#fff",border:"1.5px solid "+(it.incluir?B.teal:B.border),borderRadius:12,padding:"10px 12px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:it.incluir?8:0}}>
-          <input type="checkbox" checked={it.incluir} onChange={()=>toggleExpItem(i)} style={{width:18,height:18,accentColor:B.teal}}/>
-          <div style={{flex:1}}>
-            <div style={{fontSize:13,fontWeight:700,color:B.textDark}}>{it.producto}</div>
-            <div style={{fontSize:11,color:B.textLight}}>Disponible: {it.disponible.toLocaleString()} {it.unidad}</div>
-          </div>
-        </div>
-        {it.incluir&&<div style={{marginTop:4}}>
-          <div style={{fontSize:10,color:B.textLight,fontWeight:700,marginBottom:2}}>Cantidad ({it.unidad})</div>
-          <input type="number" value={it.cantidad} placeholder="0" onChange={e=>setExpItem(i,"cantidad",e.target.value)}
-            style={{width:"100%",padding:"6px 8px",border:"1.5px solid "+B.border,borderRadius:8,fontSize:13,boxSizing:"border-box"}}/>
-        </div>}
-      </div>)}
-      <Btn ch={"Crear Exportación"+(expItems.length>0?" — "+expItems.length+" productos":"")} fn={saveExportacion} full color={B.navy}/>
+      <div style={{fontSize:11,color:B.textLight}}>Beg = stock inicial (auto, editable). S1/S2 = unidades hechas en cada turno. Total = S1 + S2 (se guarda como entrada por turno).</div>
+      <Btn ch="✓ Guardar Producción del Día" fn={saveProduccion} full color={B.teal}/>
     </div>}/></div>}
 
+    {/* Exportación form */}
     {/* Entrada/Compra form */}
     {(modo==="entrada"||modo==="compra")&&<div style={{animation:"slideDown .2s ease"}}><Card accent={modo==="compra"?B.purple:B.green} ch={<div style={{display:"flex",flexDirection:"column",gap:12}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -2569,12 +2576,12 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
     const matId=matName.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
     setMat(p=>{
       const exists=p.find(x=>x.id===matId);
-      if(exists)return p.map(x=>x.id===matId?Object.assign({},x,{stockActual:(x.stockActual||0)+lbs}):x);
-      return [...p,{id:matId,nombre:matName,stockActual:lbs,stockMinimo:0,unidad:"lbs"}];
+      if(exists)return p.map(x=>x.id===matId?Object.assign({},x,{stockActual:Math.max(0,(x.stockActual||0)-lbs)}):x);
+      return [...p,{id:matId,nombre:matName,stockActual:0,stockMinimo:0,unidad:"lbs"}];
     });
-    const mv={id:Date.now()+Math.random(),tipo:"entrada",materialId:matId,materialNombre:matName,cantidad:lbs,unidad:"lbs",proveedor:mpProveedor||"",maquina:"Almacén",fecha:fechaVer,supervisor:sup.nombre,notas:(mpLote?"Lote: "+mpLote:"")+(mpNotas?(mpLote?" · ":"")+mpNotas:"")};
+    const mv={id:Date.now()+Math.random(),tipo:"descuento",materialId:matId,materialNombre:matName,cantidad:lbs,unidad:"lbs",proveedor:mpProveedor||"",maquina:"Producción",fecha:fechaVer,supervisor:sup.nombre,notas:(mpLote?"Lote: "+mpLote:"")+(mpNotas?(mpLote?" · ":"")+mpNotas:"")};
     setMovs(p=>[mv,...p]);qSaveMovimiento(mv);
-    logEvent("material.received","inventario_movimientos",mv.id,{material:matName,lbs,proveedor:mpProveedor||null,lote:mpLote||null},sup);
+    logEvent("material.issued","inventario_movimientos",mv.id,{material:matName,lbs,destino:"produccion",lote:mpLote||null},sup);
     setMpCantidad("");setMpProveedor("");setMpLote("");setMpNotas("");setMpOpen(false);
   };
 
@@ -2583,6 +2590,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
   const [ldpe,setLdpe]=useState("");
   const [mlldpe,setMlldpe]=useState("");
   const [reciclado,setReciclado]=useState("");
+  const [carbonato,setCarbonato]=useState("");
   const [mezMaq,setMezMaq]=useState("MEZ-1");
   const [mezEmp,setMezEmp]=useState("");
   const [mezNota,setMezNota]=useState("");
@@ -2591,15 +2599,16 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
   // Keep mezcla fecha in sync with date-view picker
   React.useEffect(()=>{setMezFecha(fechaVer);},[fechaVer]);
 
-  const mezTotal=()=>(Number(ldpe)||0)+(Number(mlldpe)||0)+(Number(reciclado)||0);
+  const mezTotal=()=>(Number(ldpe)||0)+(Number(mlldpe)||0)+(Number(reciclado)||0)+(Number(carbonato)||0);
   const saveMezcla=()=>{
     if(readOnly)return;
     if(!mezTotal())return;
     const loteIdUsed=mezLoteId||null;
     const recVal=Number(reciclado)||0;
-    const b={id:Date.now(),fecha:mezFecha,ldpe:Number(ldpe)||0,mlldpe:Number(mlldpe)||0,reciclado:recVal,total:mezTotal(),maquina:mezMaq,empleado:mezEmp,notas:mezNota,loteId:loteIdUsed};
+    const carbVal=Number(carbonato)||0;
+    const b={id:Date.now(),fecha:mezFecha,ldpe:Number(ldpe)||0,mlldpe:Number(mlldpe)||0,reciclado:recVal,carbonato:carbVal,total:mezTotal(),maquina:mezMaq,empleado:mezEmp,notas:mezNota,loteId:loteIdUsed};
     // Deduct from Almacén
-    [["ldpe",b.ldpe],["mlldpe",b.mlldpe],["material_reciclado_pvc",recVal]].forEach(([id,val])=>{
+    [["ldpe",b.ldpe],["mlldpe",b.mlldpe],["material_reciclado_pvc",recVal],["carbonato_de_calcio",carbVal]].forEach(([id,val])=>{
       if(!val)return;
       const m=mat.find(x=>x.id===id);if(!m)return;
       setMat(p=>p.map(x=>x.id===id?Object.assign({},x,{stockActual:Math.max(0,x.stockActual-val)}):x));
@@ -2621,7 +2630,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
         return upd;
       }));
     }
-    setLdpe("");setMlldpe("");setReciclado("");setMezNota("");setMezLoteId("");setMezOpen(false);
+    setLdpe("");setMlldpe("");setReciclado("");setCarbonato("");setMezNota("");setMezLoteId("");setMezOpen(false);
   };
   // Create a new lote (batch) — called from Mezcla card
   const crearNuevoLote=()=>{
@@ -2639,7 +2648,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
   const STAGES=[
     {id:"extrusion",label:"Extrusión",icon:"⚙️",color:B.teal,fields:["lbs_in","lbs_out","rollosProducidos","tamanoRollo","desperdicio"]},
     {id:"producto_final",label:"Producto Final",icon:"✓",color:B.green,fields:["pfCantidad","pfProducto","pfUnidad"]},
-    {id:"peletizadora",label:"Peletizadora / Crusher",icon:"🔄",color:"#0D9488",fields:["peletEntrada","peletSalida","peletDesperdicio"]}
+    {id:"peletizadora",label:"Molinos / Polvo",icon:"🔄",color:"#0D9488",fields:["peletEntrada","peletSalida","peletDesperdicio"]}
   ];
 
   const saveReg=(etapa,data)=>{
@@ -2683,7 +2692,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
       });
       const mv={id:Date.now()+3,tipo:"entrada",materialId:matId,materialNombre:matName,cantidad:lbs,unidad:"lbs",maquina:data.maquina||"PEL-1",fecha,supervisor:sup.nombre,notas:"Auto: "+(data.maquina||"PEL-1")+" — "+lbs+" lbs polvo reciclado"};
       setMovs(p=>[mv,...p]);qSaveMovimiento(mv);
-      logEvent("recycled.produced","inventario_movimientos",mv.id,{material:matName,lbs,maquina:data.maquina||"PEL-1",entrada_lbs:Number(data.peletEntrada)||0,perdida:Number(data.peletDesperdicio)||0},sup);
+      logEvent("recycled.produced","inventario_movimientos",mv.id,{material:matName,lbs,maquina:data.maquina||"MOL-M1",entrada_lbs:Number(data.peletEntrada)||0,perdida:Number(data.peletDesperdicio)||0},sup);
     }
     // Auto-stock: producto_final → producto_terminado
     if(etapa==="producto_final"&&(Number(data.pfCantidad)||Number(data.lbs_out)||0)>0){
@@ -2787,7 +2796,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
           <div style={{width:40,height:40,borderRadius:12,background:"#B4530918",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>📦</div>
           <div>
             <div style={{fontWeight:800,fontSize:15,color:B.textDark}}>Materia Prima</div>
-            <div style={{fontSize:12,color:B.textLight}}>Entrada de materiales al almacén</div>
+            <div style={{fontSize:12,color:B.textLight}}>Consumo de materia prima en producción</div>
           </div>
         </div>
         <Btn ch={mpOpen?"✕ Cerrar":"+ Registrar"} fn={()=>{if(!readOnly)setMpOpen(!mpOpen);}} color={mpOpen?B.textMid:"#B45309"} small/>
@@ -2800,8 +2809,8 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
         </div>
         <F label="Proveedor (opcional)" value={mpProveedor} onChange={setMpProveedor} placeholder="Nombre"/>
         <F label="Notas (opcional)" value={mpNotas} onChange={setMpNotas} placeholder="..."/>
-        <div style={{background:"#B4530912",borderRadius:8,padding:"9px 12px",fontSize:12,color:"#B45309",fontWeight:600}}>📦 Se sumará al inventario de materia prima al guardar</div>
-        <Btn ch={readOnly?"🔒 Solo lectura":"✓ Registrar Entrada"} fn={saveMP} color={readOnly?B.textLight:"#B45309"} full/>
+        <div style={{background:"#B4530912",borderRadius:8,padding:"9px 12px",fontSize:12,color:"#B45309",fontWeight:600}}>📦 Se descontará del inventario de materia prima al guardar</div>
+        <Btn ch={readOnly?"🔒 Solo lectura":"✓ Registrar Consumo"} fn={saveMP} color={readOnly?B.textLight:"#B45309"} full/>
       </div>}
     </div>}/>
 
@@ -2821,7 +2830,7 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
         </div>
       </div>
       {/* Stock display */}
-      {mezOpen&&(()=>{const recStock=(mat.find(m=>m.id==="material_reciclado_pvc")||{stockActual:0}).stockActual;return(<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
+      {mezOpen&&(()=>{const recStock=(mat.find(m=>m.id==="material_reciclado_pvc")||{stockActual:0}).stockActual;const carbStock=(mat.find(m=>m.id==="carbonato_de_calcio")||{stockActual:0}).stockActual;return(<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:12}}>
         <div style={{background:B.teal+"12",borderRadius:10,padding:"8px 10px",border:"1px solid "+B.teal+"30"}}>
           <div style={{fontSize:10,color:B.textLight,fontWeight:700,textTransform:"uppercase"}}>LDPE</div>
           <div style={{fontSize:16,fontWeight:800,color:B.teal}}>{ldpeStock.toLocaleString()}<span style={{fontSize:10,color:B.textLight}}> lbs</span></div>
@@ -2834,13 +2843,18 @@ function ProduccionSimple({sup,regs,setRegs,resinaLogs,setResinaLogs,mat,setMat,
           <div style={{fontSize:10,color:B.textLight,fontWeight:700,textTransform:"uppercase"}}>Reciclado</div>
           <div style={{fontSize:16,fontWeight:800,color:"#0D9488"}}>{recStock.toLocaleString()}<span style={{fontSize:10,color:B.textLight}}> lbs</span></div>
         </div>
+        <div style={{background:"#B4530912",borderRadius:10,padding:"8px 10px",border:"1px solid #B4530930"}}>
+          <div style={{fontSize:10,color:B.textLight,fontWeight:700,textTransform:"uppercase"}}>Carbonato</div>
+          <div style={{fontSize:16,fontWeight:800,color:"#B45309"}}>{carbStock.toLocaleString()}<span style={{fontSize:10,color:B.textLight}}> lbs</span></div>
+        </div>
       </div>);})()}
       {mezOpen&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
         <F label="Fecha" value={mezFecha} onChange={setMezFecha} type="date"/>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8}}>
           <F label="LDPE (lbs)" value={ldpe} onChange={setLdpe} type="number" placeholder="0"/>
           <F label="MLLDPE (lbs)" value={mlldpe} onChange={setMlldpe} type="number" placeholder="0"/>
           <F label="Reciclado (lbs)" value={reciclado} onChange={setReciclado} type="number" placeholder="0"/>
+          <F label="Carbonato (lbs)" value={carbonato} onChange={setCarbonato} type="number" placeholder="0"/>
         </div>
         {mezTotal()>0&&<div style={{background:B.bg,borderRadius:10,padding:"8px 12px"}}>
           <span style={{fontSize:12,fontWeight:700,color:B.textMid}}>Total: </span>
@@ -3441,7 +3455,7 @@ function Dashboard({regs,mat,ordenes,resinaLogs,setVista,productoLogs}){
   // ── Waste by stage today ──
   const wasteStages=[
     {label:"Extrusión",value:regsHoy.filter(r=>r.etapa==="extrusion").reduce((s,r)=>s+(Number(r.desperdicio)||0),0)},
-    {label:"Peletizadora",value:regsHoy.filter(r=>r.etapa==="peletizadora").reduce((s,r)=>s+(Number(r.peletDesperdicio)||Number(r.desperdicio)||0),0)}
+    {label:"Molinos",value:regsHoy.filter(r=>r.etapa==="peletizadora").reduce((s,r)=>s+(Number(r.peletDesperdicio)||Number(r.desperdicio)||0),0)}
   ];
   const wasteMax=Math.max(...wasteStages.map(s=>s.value),1);
 
@@ -5183,9 +5197,10 @@ function MaquinariasPanel({regs,setRegs,sup,gastos,setGastos}){
         const lastParada=paradas.filter(r=>r.maquina===m).sort((a,b)=>new Date(b.fecha)-new Date(a.fecha))[0];
         const totalHrs=paradas.filter(r=>r.maquina===m).reduce((s,r)=>s+(Number(r.duracionParada)||0),0);
         const totalParCount=paradas.filter(r=>r.maquina===m).length;
+        const totalGastos=maqGastos.filter(r=>r.maquina===m).reduce((s,r)=>s+(Number(r.pelicula)||0),0);
         const manual=manualEstados[m];
         const status=manual?manual.status:(hasParada?"parada":hasProd?"activa":"inactiva");
-        return{maquina:m,status,hasProd,hasParada,lastParada,totalHrs,totalParCount,manual};
+        return{maquina:m,status,hasProd,hasParada,lastParada,totalHrs,totalParCount,totalGastos,manual};
       });
       const activas=maqStatus.filter(m=>m.status==="activa").length;
       const paradasCount=maqStatus.filter(m=>m.status==="parada").length;
@@ -5250,7 +5265,9 @@ function MaquinariasPanel({regs,setRegs,sup,gastos,setGastos}){
             <button onClick={()=>activarMaquina(m.maquina)} disabled={m.status==="activa"} style={{flex:1,background:m.status==="activa"?B.green:"#fff",border:"1.5px solid "+B.green,borderRadius:8,padding:"7px 8px",color:m.status==="activa"?"#fff":B.green,fontSize:11,fontWeight:800,cursor:m.status==="activa"?"default":"pointer",opacity:m.status==="activa"?1:.95}}>● Activa</button>
             <button onClick={()=>openModal("parar",m.maquina)} style={{flex:1,background:m.status==="parada"?B.red:"#fff",border:"1.5px solid "+B.red,borderRadius:8,padding:"7px 8px",color:m.status==="parada"?"#fff":B.red,fontSize:11,fontWeight:800,cursor:"pointer"}}>■ Parar</button>
             <button onClick={()=>openModal("apagar",m.maquina)} style={{flex:1,background:m.status==="apagada"?"#475569":"#fff",border:"1.5px solid #475569",borderRadius:8,padding:"7px 8px",color:m.status==="apagada"?"#fff":"#475569",fontSize:11,fontWeight:800,cursor:"pointer"}}>⏻ Apagar</button>
+            <button onClick={()=>{setGMaquina(m.maquina);setGFecha(hoy);setSeccion("gastos");setShowForm(true);}} style={{flex:1,background:"#fff",border:"1.5px solid "+B.amber,borderRadius:8,padding:"7px 8px",color:B.amber,fontSize:11,fontWeight:800,cursor:"pointer"}}>💰 Gasto</button>
           </div>
+          {m.totalGastos>0&&<div style={{width:"100%",fontSize:11,color:B.textLight,marginTop:2}}>Gastos acumulados: <span style={{color:B.red,fontWeight:700}}>${m.totalGastos.toLocaleString()}</span></div>}
         </div>))}
       </div>);
     })()}
@@ -5574,9 +5591,10 @@ const DIAS_QUINCENA=12;
 // Haitian payroll deduction rates (employee share). Verify with ONA/OFATMA.
 const AFP_RATE=0.03, ARS_RATE=0.03;
 const MESES_LABEL=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-function getQuincenaKey(y,m,q){return y+"-"+String(m).padStart(2,"0")+"-"+(q===1?"15":"30");}
-function getQuincenaLabel(key){const[y,m,d]=key.split("-");return(d==="15"?"1ra":"2da")+" Quincena "+MESES_LABEL[Number(m)-1]+" "+y;}
-function calcISR(salarioMensual){const anual=salarioMensual*12;if(anual<=ISR_EXENTO_ANUAL)return 0;return((anual-ISR_EXENTO_ANUAL)*0.15)/24;}
+// Monthly payroll cycle: key = YYYY-MM-01, label = "Mes Año"
+function getQuincenaKey(y,m){return y+"-"+String(m).padStart(2,"0")+"-01";}
+function getQuincenaLabel(key){const[y,m]=key.split("-");return MESES_LABEL[Number(m)-1]+" "+y;}
+function calcISR(salarioMensual){const anual=salarioMensual*12;if(anual<=ISR_EXENTO_ANUAL)return 0;return((anual-ISR_EXENTO_ANUAL)*0.15)/12;}
 
 // Module-scope helpers so React preserves <input> DOM (and focus) across re-renders.
 // They read the latest draft state via a ref, so users can keep typing without losing focus.
@@ -5613,13 +5631,11 @@ function Nomina({sup,gastos,setGastos}){
   const SK_DRAFT="plastinord_nomina_draft";
   const SK_HIST="plastinord_nominas_hist";
 
-  // Current period
+  // Current period (monthly cycle)
   const hoy=new Date();
-  const qActual=hoy.getDate()<=15?1:2;
   const [anio,setAnio]=useState(hoy.getFullYear());
   const [mes,setMes]=useState(hoy.getMonth()+1);
-  const [quincena,setQuincena]=useState(qActual);
-  const periodoKey=getQuincenaKey(anio,mes,quincena);
+  const periodoKey=getQuincenaKey(anio,mes);
 
   // Draft data per period
   const [drafts,setDrafts]=useState(()=>{try{return JSON.parse(localStorage.getItem(SK_DRAFT)||"{}");}catch(e){return{};}});
@@ -5754,7 +5770,7 @@ function Nomina({sup,gastos,setGastos}){
   const fmtD=(n)=>Number(n||0).toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3});
 
   const procesarNomina=async()=>{
-    if(isProcesada){alert("Esta quincena ya fue procesada.");return;}
+    if(isProcesada){alert("Este mes ya fue procesado.");return;}
     setConfirmando(true);
   };
   const confirmarProcesar=async()=>{
@@ -6035,11 +6051,7 @@ function Nomina({sup,gastos,setGastos}){
           {[2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
         </select>
       </div>
-      <div style={{display:"flex",gap:8,marginTop:8}}>
-        {[1,2].map(q=><button key={q} onClick={()=>setQuincena(q)} style={{flex:1,padding:"10px",border:"1.5px solid "+(quincena===q?B.navy:B.border),borderRadius:10,background:quincena===q?B.navy:"#fff",color:quincena===q?"#fff":B.textMid,fontSize:13,fontWeight:700,cursor:"pointer"}}>
-          {q===1?"1ra Quincena (1-15)":"2da Quincena (16-"+new Date(anio,mes,0).getDate()+")"}
-        </button>)}
-      </div>
+      <div style={{marginTop:8,fontSize:11,color:B.textLight,textAlign:"center"}}>Ciclo mensual · {MESES_LABEL[mes-1]} {anio}</div>
       {isProcesada&&<div style={{marginTop:8,background:B.green+"15",border:"1.5px solid "+B.green,borderRadius:10,padding:"8px 12px",textAlign:"center"}}>
         <span style={{fontSize:12,fontWeight:700,color:B.green}}>Nómina procesada</span>
       </div>}
@@ -6129,16 +6141,33 @@ function Nomina({sup,gastos,setGastos}){
 // ── Empleado Edit Form ───────────────────────────────────────────────────────
 function EmpleadoEditForm({nombre,profile,onSave,onCancel}){
   const [form,setForm]=useState({
+    foto:profile.foto||"",
     telefono:profile.telefono||"",contactoEmergencia:profile.contactoEmergencia||"",
     tallaCamisa:profile.tallaCamisa||"",tallaZapatos:profile.tallaZapatos||"",tallaPantalon:profile.tallaPantalon||"",
     fechaNacimiento:profile.fechaNacimiento||"",direccion:profile.direccion||"",
     vacacionesUsadas:profile.vacacionesUsadas||0,notas:profile.notas||""
   });
   const sf=k=>v=>setForm(f=>({...f,[k]:v}));
+  const onPickFoto=(file)=>{
+    if(!file)return;
+    if(file.size>2*1024*1024){alert("La foto no puede exceder 2MB");return;}
+    const r=new FileReader();
+    r.onload=e=>setForm(f=>({...f,foto:e.target.result}));
+    r.readAsDataURL(file);
+  };
   return(<div style={{display:"flex",flexDirection:"column",gap:10}}>
     <button onClick={onCancel} style={{alignSelf:"flex-start",background:"none",border:"none",color:B.teal,fontSize:14,fontWeight:700,cursor:"pointer",padding:0}}>← Cancelar</button>
     <Card ch={<div style={{display:"flex",flexDirection:"column",gap:12}}>
       <div style={{fontSize:16,fontWeight:800,color:B.navy}}>Editar Perfil: {nombre.split(" ")[0]}</div>
+      <div style={{display:"flex",alignItems:"center",gap:14}}>
+        <div style={{width:72,height:72,borderRadius:"50%",overflow:"hidden",background:B.bg,border:"2px solid "+B.border,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          {form.foto?<img src={form.foto} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:11,color:B.textLight}}>Sin foto</span>}
+        </div>
+        <div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
+          <label style={{background:B.teal,color:"#fff",borderRadius:10,padding:"8px 12px",fontSize:12,fontWeight:700,cursor:"pointer",textAlign:"center"}}>📷 {form.foto?"Cambiar foto":"Subir foto"}<input type="file" accept="image/*" onChange={e=>onPickFoto(e.target.files&&e.target.files[0])} style={{display:"none"}}/></label>
+          {form.foto&&<button onClick={()=>setForm(f=>({...f,foto:""}))} style={{background:"none",border:"1px solid "+B.border,borderRadius:10,padding:"6px 10px",fontSize:11,color:B.textMid,cursor:"pointer"}}>Eliminar foto</button>}
+        </div>
+      </div>
       <F label="Fecha de Nacimiento" value={form.fechaNacimiento} onChange={sf("fechaNacimiento")} type="date"/>
       <F label="Teléfono" value={form.telefono} onChange={sf("telefono")} placeholder="809-000-0000"/>
       <F label="Contacto de Emergencia" value={form.contactoEmergencia} onChange={sf("contactoEmergencia")} placeholder="Nombre — Teléfono"/>
@@ -6443,7 +6472,7 @@ function EmpleadosPanel({sup}){
       <F label="Nombre completo" value={newEmp.nombre} onChange={v=>setNewEmp(f=>({...f,nombre:v}))} placeholder="Nombre y apellido"/>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
         <F label="Cargo" value={newEmp.cargo} onChange={v=>setNewEmp(f=>({...f,cargo:v}))} placeholder="Ej: Operador Extrusión"/>
-        <S label="Área" value={newEmp.area} onChange={v=>setNewEmp(f=>({...f,area:v}))} options={[{v:"materia_prima",l:"Materia Prima"},{v:"mezcla",l:"Mezcla"},{v:"extrusion",l:"Extrusión"},{v:"producto_final",l:"Producto Final"},{v:"peletizadora",l:"Peletizadora"},{v:"supervision",l:"Supervisión"},{v:"general",l:"General"}]}/>
+        <S label="Área" value={newEmp.area} onChange={v=>setNewEmp(f=>({...f,area:v}))} options={[{v:"materia_prima",l:"Materia Prima"},{v:"mezcla",l:"Mezcla"},{v:"extrusion",l:"Extrusión"},{v:"producto_final",l:"Producto Final"},{v:"peletizadora",l:"Molinos / Polvo"},{v:"supervision",l:"Supervisión"},{v:"general",l:"General"}]}/>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
         <F label={"Salario mensual ("+(newEmp.moneda||"HTG")+")"} value={newEmp.salario} onChange={v=>setNewEmp(f=>({...f,salario:v}))} type="number" placeholder="0"/>
@@ -6477,9 +6506,10 @@ function EmpleadosPanel({sup}){
     {filtered.map(e=>{
       const p=getP(e.nombre);
       const hasProfile=p.telefono||p.tallaCamisa;
+      const grad=e.tipo==="nomina"?"linear-gradient(135deg,"+B.teal+","+B.navy+")":e.tipo==="adicional"?"linear-gradient(135deg,"+B.purple+",#5B21B6)":"linear-gradient(135deg,"+B.amber+",#B45309)";
       return(<div key={e.nombre} onClick={()=>setSelected(e)} style={{background:"#fff",borderRadius:12,padding:"12px 14px",border:"1.5px solid "+B.border,cursor:"pointer",display:"flex",gap:12,alignItems:"center"}}>
-        <div style={{width:40,height:40,borderRadius:12,background:e.tipo==="nomina"?"linear-gradient(135deg,"+B.teal+","+B.navy+")":e.tipo==="adicional"?"linear-gradient(135deg,"+B.purple+",#5B21B6)":"linear-gradient(135deg,"+B.amber+",#B45309)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,fontWeight:800,flexShrink:0}}>
-          {e.nombre.split(" ").map(n=>n[0]).slice(0,2).join("")}
+        <div style={{width:40,height:40,borderRadius:12,background:p.foto?"#fff":grad,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,fontWeight:800,flexShrink:0,overflow:"hidden"}}>
+          {p.foto?<img src={p.foto} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:e.nombre.split(" ").map(n=>n[0]).slice(0,2).join("")}
         </div>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:13,fontWeight:700,color:B.textDark,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{e.nombre}</div>
